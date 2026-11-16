@@ -8,6 +8,9 @@ import { test } from "node:test";
 
 const root = new URL("../", import.meta.url).pathname;
 
+const hostPlatform = process.platform;
+Object.defineProperty(process, "platform", { value: "darwin" });
+
 test("LastPass hosted CLI and stdio MCP read only the exact cloud-authorized companion ref", async (t) => {
   const work = await mkdtemp(path.join(root, "tmp/lastpass-companion-"));
   t.after(() => rm(work, { recursive: true, force: true }));
