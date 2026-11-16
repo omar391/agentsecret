@@ -8,15 +8,6 @@ import { test } from "node:test";
 
 const root = new URL("../", import.meta.url).pathname;
 
-const hostPlatform = process.platform;
-Object.defineProperty(process, "platform", {
-  configurable: true,
-  get() {
-    return "darwin";
-  },
-  set() {},
-});
-
 test("LastPass hosted CLI and stdio MCP read only the exact cloud-authorized companion ref", async (t) => {
   const work = await mkdtemp(path.join(root, "tmp/lastpass-companion-"));
   t.after(() => rm(work, { recursive: true, force: true }));
@@ -65,6 +56,7 @@ test("LastPass hosted CLI and stdio MCP read only the exact cloud-authorized com
     `import child from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { createHash } from 'node:crypto';
+Object.defineProperty(process, 'platform', { value: 'darwin' });
 const storage = new Map();
 const binding = ${JSON.stringify(binding)};
 const key = createHash('sha256').update(JSON.stringify(binding)).digest('base64url');

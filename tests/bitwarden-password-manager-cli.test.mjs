@@ -7,15 +7,6 @@ import { test } from "node:test";
 
 const root = new URL("../", import.meta.url).pathname;
 
-const hostPlatform = process.platform;
-Object.defineProperty(process, "platform", {
-  configurable: true,
-  get() {
-    return "darwin";
-  },
-  set() {},
-});
-
 test("hosted CLI uses the exact local Bitwarden Password Manager companion after cloud authorization", async (t) => {
   const folderRoot = path.join(root, "tmp");
   await mkdir(folderRoot, { recursive: true });
@@ -58,6 +49,7 @@ test("hosted CLI uses the exact local Bitwarden Password Manager companion after
     `import child from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { createHash } from 'node:crypto';
+Object.defineProperty(process, 'platform', { value: 'darwin' });
 const storage = new Map();
 const binding = ${JSON.stringify(binding)};
 const key = createHash('sha256').update(JSON.stringify(binding)).digest('base64url');
