@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "./**/*.ts",
+    "../state/authority-kernel.ts",
+    "../state/storage.ts",
+    "../registry/database.ts",
+    "../registry/store.ts",
+    "../security/primitives.ts",
+    "../security/policy.ts",
+    "../security/browser-grant.ts",
+    "../core/application.ts",
+    "../types.ts"
+  ],
+  "exclude": []
+}

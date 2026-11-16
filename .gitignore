@@ -1,0 +1,36 @@
+node_modules/
+/web/node_modules
+.wrangler/
+dist/
+.DS_Store
+*.log
+.env
+/data/
+
+worktrees/
+tmp/
+solution-notes.md
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+src/generated/
+
+# git-land trunk
+.trunk/*
+!.trunk/trunk.yaml
+!.trunk/configs/
+!.trunk/configs/**
+
+# Generated video-tool state; authored composition and final media stay tracked.
+launch-video/.hyperframes/
+
+native/**/target/
+
+# Generated standalone CLI static asset.
+/web/public/cli.mjs
+
+# Generated AGPL source-access artifacts (rebuilt by build:source-access).
+web/public/source.tar.gz
+web/public/source.tar.gz.sha256
+web/public/source-revision.json

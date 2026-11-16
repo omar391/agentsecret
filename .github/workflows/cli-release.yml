@@ -1,0 +1,134 @@
+name: Versioned CLI release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and default-branch ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          git merge-base --is-ancestor "$RELEASE_COMMIT" "origin/$DEFAULT_BRANCH"
+          node scripts/check-release-tag.mjs
+
+  release:
+    needs: validate-source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          npm --prefix web ci
+
+      - name: Run typecheck and full test suite
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build and smoke-check standalone CLI
+        run: |
+          npm run build:cli
+          node --check dist/cli.mjs
+          node dist/cli.mjs --help
+
+      - name: Attest CLI build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/cli.mjs
+
+      - name: Verify provenance and reject a modified artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          SIGNER_WORKFLOW="$REPOSITORY/.github/workflows/cli-release.yml"
+          gh attestation verify dist/cli.mjs \
+            --repo "$REPOSITORY" \
+            --signer-workflow "$SIGNER_WORKFLOW"
+
+          cp dist/cli.mjs dist/cli-tampered.mjs
+          printf '\n// modified after build\n' >> dist/cli-tampered.mjs
+          if gh attestation verify dist/cli-tampered.mjs \
+            --repo "$REPOSITORY" \
+            --signer-workflow "$SIGNER_WORKFLOW"; then
+            echo "Modified CLI unexpectedly passed attestation verification." >&2
+            exit 1
+          fi
+
+      - name: Publish versioned release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$RELEASE_TAG" dist/cli.mjs
+          --verify-tag
+          --title "AgentSecret CLI $RELEASE_TAG"
+          --generate-notes
+
+      - name: Download and verify the published artifact before launch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          RELEASE_DIR="$RUNNER_TEMP/agentsecret-released-cli"
+          mkdir -p "$RELEASE_DIR"
+          gh release download "$RELEASE_TAG" \
+            --repo "$REPOSITORY" \
+            --pattern cli.mjs \
+            --dir "$RELEASE_DIR"
+          RELEASE_CLI="$RELEASE_DIR/cli.mjs"
+          test -s "$RELEASE_CLI"
+
+          SIGNER_WORKFLOW="$REPOSITORY/.github/workflows/cli-release.yml"
+          gh attestation verify "$RELEASE_CLI" \
+            --repo "$REPOSITORY" \
+            --signer-workflow "$SIGNER_WORKFLOW"
+          node "$RELEASE_CLI" --help
+
+          cp "$RELEASE_CLI" "$RELEASE_DIR/cli-tampered.mjs"
+          printf '\n// modified after publication\n' >> "$RELEASE_DIR/cli-tampered.mjs"
+          if gh attestation verify "$RELEASE_DIR/cli-tampered.mjs" \
+            --repo "$REPOSITORY" \
+            --signer-workflow "$SIGNER_WORKFLOW"; then
+            echo "Modified published CLI unexpectedly passed attestation verification." >&2
+            exit 1
+          fi

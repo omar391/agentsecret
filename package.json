@@ -1,0 +1,88 @@
+{
+  "name": "agentsecret",
+  "version": "3.0.0",
+  "description": "Policy-bound secret broker for agents, with DPoP and durable authorization",
+  "main": "./dist/cli.mjs",
+  "scripts": {
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "build": "npm run build:cli && npm run build:source-access && npm run build:web",
+    "db:migrate:turso": "node scripts/migrate-turso.mjs",
+    "typecheck": "npm run build:cli && tsc --noEmit && tsc -p cli/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit && tsc -p src/server/tsconfig.json --noEmit",
+    "test": "npm run build:cli && npm run build:source-access && npm run build:web && node --test --test-concurrency=1 tests/*.test.mjs && npm run test:turso-adapter && npm run test:node-conformance && npm run test:local-security",
+    "test:turso-adapter": "tsx --test --test-concurrency=1 tests/turso-adapter.test.ts",
+    "test:node-conformance": "tsx --test --test-concurrency=1 tests/node-server-conformance.test.ts",
+    "test:license-boundary": "npm run build:cli && npm run build:web && node --test --test-concurrency=1 tests/license-boundary.test.mjs",
+    "test:local-security": "tsx --test --test-concurrency=1 tests/provider-credentials.test.ts tests/onepassword-service-account.test.ts tests/bitwarden-password-manager.test.ts tests/lastpass.test.ts tests/browser-executor.test.ts tests/docker-runtime.test.ts && npm run test:license-boundary",
+    "accept:macos-keychain": "tsx scripts/accept-macos-keychain.ts",
+    "accept:macos-packaged-cli": "node scripts/accept-macos-packaged-cli.mjs",
+    "accept:codex-host": "node scripts/accept-codex-host.mjs",
+    "accept:lastpass-companion": "tsx scripts/accept-lastpass-companion.ts",
+    "accept:linux-secret-service": "node scripts/accept-linux-secret-service.mjs",
+    "accept:linux-egress-boundary": "node scripts/accept-linux-egress-boundary.mjs",
+    "build:cli": "node scripts/build-cli.mjs && node web/scripts/build-cli-notices.mjs",
+    "build:server": "npm run build:cli && npm run build:source-access && npm run build:web && node web/scripts/build-server.mjs",
+    "build:source-access": "node web/scripts/build-source-archive.mjs",
+    "trunk:check": "trunk check --ci --all",
+    "prepack": "npm run build:cli && npm run build:source-access",
+    "serve": "npm run build:server && node dist/server/index.mjs",
+    "accept:browser-cdp": "AGENTSECRET_BROWSER_ACCEPTANCE=1 tsx --test tests/browser-cdp-acceptance.test.ts",
+    "accept:executor-keychain": "tsx scripts/accept-executor-keychain.ts",
+    "setup:supervisor": "node -e \"const { spawnSync } = require('node:child_process'); const { isAbsolute } = require('node:path'); const configDir = process.env.AGENTSECRET_CONFIG_DIR; if (!configDir || !isAbsolute(configDir)) { console.error('Set AGENTSECRET_CONFIG_DIR to an absolute directory shared with AgentSecret before running npm run setup:supervisor.'); process.exit(1); } if (process.platform !== 'darwin' || process.arch !== 'arm64') { console.error('The packaged supervisor install path is qualified for macOS Apple silicon.'); process.exit(1); } const result = spawnSync('cargo', ['install', '--locked', '--path', 'native/agentsecret-supervisor', '--root', configDir, '--force'], { stdio: 'inherit' }); if (result.error) { console.error('Unable to run cargo; install Rust before setting up the AgentSecret supervisor.'); process.exit(1); } process.exit(result.status ?? 1);\""
+  },
+  "keywords": [
+    "agentsecret",
+    "agent-secrets",
+    "ai-agent-security",
+    "model-context-protocol",
+    "mcp-server",
+    "bitwarden",
+    "1password",
+    "vite",
+    "react"
+  ],
+  "author": "AstronLab",
+  "license": "MIT",
+  "devDependencies": {
+    "@1password/sdk": "0.5.0",
+    "@libsql/client": "0.18.0",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "miniflare": "5.20261023.3-beta",
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2",
+    "wrangler": "^4.156.0"
+  },
+  "dependencies": {
+    "@tursodatabase/serverless": "1.4.1",
+    "jose": "^6.2.14"
+  },
+  "type": "module",
+  "bin": {
+    "agentsecret": "./bin/agentsecret.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "undici": "^7.30.1",
+    "sharp": "^0.35.5"
+  },
+  "files": [
+    "bin/agentsecret.js",
+    "dist/cli.mjs",
+    "dist/THIRD-PARTY-NOTICES.txt",
+    "web/dist/source.tar.gz",
+    "web/dist/source.tar.gz.sha256",
+    "web/dist/source-revision.json",
+    "native/agentsecret-supervisor/Cargo.toml",
+    "native/agentsecret-supervisor/Cargo.lock",
+    "native/agentsecret-supervisor/src",
+    "skills/agentsecret-cli"
+  ],
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20261023.1": true
+  }
+}

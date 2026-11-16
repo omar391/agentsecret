@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="How AgentSecret handles account, connection, and request data."
+    />
+    <title>Privacy — AgentSecret</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: #17211d;
+        background: #f7f9f7;
+      }
+      body {
+        margin: 0;
+        line-height: 1.65;
+      }
+      main {
+        box-sizing: border-box;
+        width: min(100% - 32px, 760px);
+        margin: 48px auto;
+        padding: clamp(24px, 5vw, 48px);
+        border: 1px solid #e0e7e2;
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: 0 16px 48px rgb(20 40 28 / 6%);
+      }
+      header {
+        padding-bottom: 24px;
+        border-bottom: 1px solid #e7ece8;
+      }
+      .eyebrow {
+        color: #18704e;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: clamp(2rem, 7vw, 3rem);
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+      }
+      h2 {
+        margin: 32px 0 8px;
+        font-size: 1.2rem;
+        line-height: 1.3;
+      }
+      p,
+      ul {
+        margin: 10px 0;
+      }
+      li + li {
+        margin-top: 7px;
+      }
+      a {
+        color: #126143;
+        text-underline-offset: 3px;
+      }
+      footer {
+        margin-top: 36px;
+        padding-top: 20px;
+        border-top: 1px solid #e7ece8;
+        color: #57645d;
+        font-size: 0.92rem;
+      }
+      @media (max-width: 520px) {
+        main {
+          width: 100%;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">AstronLab · AgentSecret</div>
+        <h1>Privacy</h1>
+        <p>Last updated: November 7, 2026</p>
+        <p>
+          This page explains the account and service data AgentSecret handles
+          when you use sign-in, connect a secret manager, or authorize an API
+          request.
+        </p>
+      </header>
+
+      <section aria-labelledby="information">
+        <h2 id="information">Information we handle</h2>
+        <ul>
+          <li>
+            <strong>Sign-in information.</strong> GitHub sign-in requests
+            <code>read:user</code> and <code>user:email</code>. Google sign-in
+            requests <code>openid</code>, <code>email</code>, and
+            <code>profile</code>. AgentSecret uses the provider's stable account
+            identifier to authenticate you. Your name, avatar, and email may be
+            stored as account profile details; email is optional and is not used
+            by itself to link accounts. Provider access tokens are used during
+            sign-in and are not retained as account credentials.
+          </li>
+          <li>
+            <strong>Account and configuration data.</strong> This includes your
+            chosen display name, connected-provider configuration, secret
+            references, aliases, access policies, and account settings. A
+            connected provider configuration is encrypted at rest.
+          </li>
+          <li>
+            <strong>Usage and security records.</strong> To enforce your
+            policies and investigate service failures, AgentSecret records
+            authorized-operation counts and limited request metadata such as
+            time, alias, HTTP method, destination host, and result status.
+            Recent request audit entries are retained for up to seven days.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="secret-data">
+        <h2 id="secret-data">Secret values and API requests</h2>
+        <p>
+          When an enabled provider connection is used, AgentSecret retrieves the
+          selected value to carry out an operation allowed by your account
+          policy. The value is not stored in request audit records or included in
+          standard agent-facing results. An authorized request is sent to the
+          destination you configured, so that destination receives the request
+          data required to perform the operation.
+        </p>
+        <p>
+          Cloudflare runs the AgentSecret Worker and account authority.
+          AgentSecret's production account and identity registry is hosted by
+          Turso Cloud in Singapore. GitHub or Google handles sign-in; connected
+          secret managers and API destinations process information when you
+          authorize their use. Their own privacy policies also apply.
+        </p>
+      </section>
+
+      <section aria-labelledby="cookies">
+        <h2 id="cookies">Cookies</h2>
+        <p>
+          AgentSecret uses secure, HTTP-only cookies for account sessions and
+          short-lived sign-in transactions. These cookies support login,
+          account linking, and logout; they are not advertising cookies. A
+          customer session expires within eight hours.
+        </p>
+      </section>
+
+      <section aria-labelledby="retention">
+        <h2 id="retention">Retention and account deletion</h2>
+        <p>
+          Account information and connected configuration remain while the
+          account is active. Expired sessions and short-lived transaction data
+          are discarded. Recent request audit entries are retained for up to
+          seven days.
+        </p>
+        <p>
+          When an account is deleted, its profile, connected configuration,
+          policies, and ordinary account records are removed. AgentSecret keeps
+          minimal account and provider-identity tombstones to prevent a deleted
+          identity or stale request from recreating access. These tombstones
+          include the provider identifier and deletion time; the current service
+          does not automatically expire them.
+        </p>
+        <p>
+          For help with your account or a privacy request, contact
+          <a href="mailto:info@astronlab.com">info@astronlab.com</a>.
+        </p>
+      </section>
+
+      <footer>
+        AgentSecret is provided by AstronLab. We update this page when the
+        information practices described here change.
+      </footer>
+    </main>
+  </body>
+</html>

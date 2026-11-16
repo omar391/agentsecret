@@ -1,0 +1,3 @@
+interface:
+  display_name: "AgentSecret CLI"
+  short_description: "Use the hosted CLI safely"

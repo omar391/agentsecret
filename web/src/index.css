@@ -1,0 +1,132 @@
+/* Craft-Frontend White Minimalism Design Tokens (Dribbble SaaS Standard) */
+:root {
+  --bg-canvas: #ffffff;
+  --bg-surface: #fafbfc;
+  --bg-surface-elevated: #ffffff;
+  --bg-surface-hover: #f1f5f9;
+  --bg-subtle: #f8fafc;
+
+  --border-subtle: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-accent: rgba(5, 150, 105, 0.4);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-muted: #94a3b8;
+
+  --signal-emerald: #059669;
+  --signal-emerald-light: #ecfdf5;
+  --signal-emerald-border: #a7f3d0;
+
+  --signal-blue: #2563eb;
+  --signal-blue-light: #eff6ff;
+  --signal-blue-border: #bfdbfe;
+
+  --signal-polar: #0062ff;
+  --signal-polar-light: #edf5ff;
+
+  --signal-coral: #e11d48;
+  --signal-coral-light: #fff1f2;
+  --signal-coral-border: #fecdd3;
+
+  --font-mono:
+    "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-card:
+    0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-elevated:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Subtle architectural grid pattern for white minimalism */
+.white-minimal-grid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Tactile button micro-taste */
+.btn-tactile {
+  transition:
+    transform 0.1s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.btn-tactile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+}
+
+.btn-tactile:active {
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+/* Precision scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-subtle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Code block styles */
+pre,
+code {
+  font-family: var(--font-mono);
+}
+
+/* Inputs & Forms */
+input,
+select,
+textarea {
+  font-family: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--text-primary) !important;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
