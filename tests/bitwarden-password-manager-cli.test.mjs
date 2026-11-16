@@ -8,7 +8,13 @@ import { test } from "node:test";
 const root = new URL("../", import.meta.url).pathname;
 
 const hostPlatform = process.platform;
-Object.defineProperty(process, "platform", { value: "darwin" });
+Object.defineProperty(process, "platform", {
+  configurable: true,
+  get() {
+    return "darwin";
+  },
+  set() {},
+});
 
 test("hosted CLI uses the exact local Bitwarden Password Manager companion after cloud authorization", async (t) => {
   const folderRoot = path.join(root, "tmp");
