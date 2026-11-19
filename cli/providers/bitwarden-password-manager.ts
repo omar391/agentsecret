@@ -40,7 +40,11 @@ export interface BitwardenPasswordManagerRunner {
   ensureSession(appName: string): Promise<FastflowBitwardenProfileIdentity>;
   readItem(appName: string, itemId: string): Promise<string>;
   createItem(appName: string, encodedItem: string): Promise<string>;
-  editItem(appName: string, itemId: string, encodedItem: string): Promise<string>;
+  editItem(
+    appName: string,
+    itemId: string,
+    encodedItem: string,
+  ): Promise<string>;
 }
 
 export interface BitwardenPasswordManagerSafeReceipt {
@@ -257,7 +261,8 @@ function sameSiblingFields(
     if (typeof updatedField === "string") delete login[updatedField];
     const fields = normalizeCustomFields(item.fields).filter(
       (field) =>
-        typeof updatedField !== "object" || field.name !== updatedField.customName,
+        typeof updatedField !== "object" ||
+        field.name !== updatedField.customName,
     );
     return JSON.stringify({ login, fields });
   };
@@ -405,7 +410,11 @@ export class BitwardenPasswordManagerAdapter {
     try {
       const output = await this.runner.createItem(profile.appName, encoded);
       const created = parseItem(output, "");
-      if (typeof created.id !== "string" || !ITEM_ID.test(created.id) || !isRecord(created.login))
+      if (
+        typeof created.id !== "string" ||
+        !ITEM_ID.test(created.id) ||
+        !isRecord(created.login)
+      )
         throw new Error("unexpected identity");
       createdId = created.id;
     } catch {

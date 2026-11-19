@@ -44,10 +44,15 @@ function validSchemaNode(schema) {
   }
   if (schema.additionalProperties !== undefined) {
     const additional = schema.additionalProperties;
-    if (additional !== true && additional !== false && !validSchemaNode(additional))
+    if (
+      additional !== true &&
+      additional !== false &&
+      !validSchemaNode(additional)
+    )
       return false;
   }
-  if (schema.items !== undefined && !validSchemaNode(schema.items)) return false;
+  if (schema.items !== undefined && !validSchemaNode(schema.items))
+    return false;
   if (schema.enum !== undefined && !Array.isArray(schema.enum)) return false;
   if (schema.minLength !== undefined && !Number.isInteger(schema.minLength))
     return false;
@@ -107,7 +112,9 @@ function schemaValueMatches(value, schema) {
     for (const key of schema.required || []) {
       if (!Object.hasOwn(value, key)) return false;
     }
-    const properties = isPlainRecord(schema.properties) ? schema.properties : {};
+    const properties = isPlainRecord(schema.properties)
+      ? schema.properties
+      : {};
     for (const key of Object.keys(value)) {
       if (Object.hasOwn(properties, key)) {
         if (!schemaValueMatches(value[key], properties[key])) return false;
@@ -457,7 +464,8 @@ function proxyServer(edgeRef, originRef, observations) {
         if (req.url === "/oauth/device/code" && req.method === "POST") {
           try {
             const grant = JSON.parse(responseBody.toString("utf8"));
-            observations.deviceUserCodeHash = liveRuntime.createHash("sha256")
+            observations.deviceUserCodeHash = liveRuntime
+              .createHash("sha256")
               .update(String(grant.user_code || ""))
               .digest("hex");
           } catch {}
@@ -989,6 +997,6 @@ if (invokedDirectly) {
           : undefined,
       }) + "\n",
     );
-  process.exitCode = 1;
+    process.exitCode = 1;
   });
 }

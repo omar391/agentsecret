@@ -7,7 +7,12 @@ import type {
   SecretPolicy,
   VaultConnection,
 } from "../types";
-import { HttpError, isWellFormedUnicode, now, reference } from "../security/primitives";
+import {
+  HttpError,
+  isWellFormedUnicode,
+  now,
+  reference,
+} from "../security/primitives";
 import {
   browserGrantOrigin,
   browserGrantOriginAllowed,
@@ -152,10 +157,7 @@ function providerWriteTargetValid(
   }
   const companion = companionWriteProvider(provider);
   if (companion) {
-    if (
-      intent === "delete" &&
-      companion !== COMPANION_DELETE_PROVIDER
-    )
+    if (intent === "delete" && companion !== COMPANION_DELETE_PROVIDER)
       return false;
     return companionTargetValid(companion, intent, target);
   }

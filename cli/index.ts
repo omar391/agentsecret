@@ -879,9 +879,7 @@ async function serviceAccountBindingForAlias(
     connectionId: record.connectionId,
     connectionRevision: record.revision as number,
     providerMode: record.provider as
-      | "bitwarden-password-manager"
-      | "lastpass"
-      | "onepassword-service-account",
+      "bitwarden-password-manager" | "lastpass" | "onepassword-service-account",
   };
 }
 
@@ -1156,9 +1154,7 @@ async function fulfillServiceAccountWrite(
         );
       } else {
         await (
-          adapter as
-            | BitwardenPasswordManagerAdapter
-            | LastPassAdapter
+          adapter as BitwardenPasswordManagerAdapter | LastPassAdapter
         ).updateField(target, value);
       }
       receipt = { status: "updated", reference: target, verified: true };

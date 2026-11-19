@@ -87,7 +87,11 @@ test("managed reference bindings stay value-free and fail closed upstream", () =
   );
   assert.equal(spec.executable, "/usr/bin/true");
   assert.deepEqual(spec.referenceBindings, [
-    { envName: "API_TOKEN", alias: "EXAMPLE_API", fieldPath: "/login/password" },
+    {
+      envName: "API_TOKEN",
+      alias: "EXAMPLE_API",
+      fieldPath: "/login/password",
+    },
   ]);
   const request = buildRunRequest(spec);
   assert.deepEqual(request.reference_bindings, [

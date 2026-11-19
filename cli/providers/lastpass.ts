@@ -236,26 +236,36 @@ const systemRunner: LastPassRunner = {
     ]);
   },
   async createItem(profileHome, name, value) {
-    return runLastPass(profileHome, [
-      "add",
-      "--sync=now",
-      "--non-interactive",
-      "--color=never",
-      "--password",
-      "--",
-      name,
-    ], 4096, value);
+    return runLastPass(
+      profileHome,
+      [
+        "add",
+        "--sync=now",
+        "--non-interactive",
+        "--color=never",
+        "--password",
+        "--",
+        name,
+      ],
+      4096,
+      value,
+    );
   },
   async updateField(profileHome, itemId, field, value) {
     const selector = field === "note" ? "--notes" : "--" + field;
-    runLastPass(profileHome, [
-      "edit",
-      "--sync=now",
-      "--non-interactive",
-      "--color=never",
-      selector,
-      itemId,
-    ], 16 * 1024 * 1024, value);
+    runLastPass(
+      profileHome,
+      [
+        "edit",
+        "--sync=now",
+        "--non-interactive",
+        "--color=never",
+        selector,
+        itemId,
+      ],
+      16 * 1024 * 1024,
+      value,
+    );
   },
 };
 

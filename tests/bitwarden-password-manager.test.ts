@@ -247,29 +247,27 @@ test("Bitwarden Password Manager creates a login item through stdin and returns 
     login: { password },
     fields: [],
   };
-  const adapter = await adapterFor(
-    {
-      async ensureSession() {
-        observed.push("ensure:agentsecret-test-profile");
-        return profileIdentity;
-      },
-      async readItem(appName, requestedId) {
-        observed.push("read:" + requestedId);
-        return JSON.stringify(item);
-      },
-      async createItem(appName, encodedItem) {
-        const decoded = JSON.parse(
-          Buffer.from(encodedItem, "base64").toString("utf8"),
-        );
-        observed.push("create:" + decoded.login.password);
-        return JSON.stringify(item);
-      },
-      async editItem() {
-        observed.push("edit");
-        return "{}";
-      },
+  const adapter = await adapterFor({
+    async ensureSession() {
+      observed.push("ensure:agentsecret-test-profile");
+      return profileIdentity;
     },
-  );
+    async readItem(appName, requestedId) {
+      observed.push("read:" + requestedId);
+      return JSON.stringify(item);
+    },
+    async createItem(appName, encodedItem) {
+      const decoded = JSON.parse(
+        Buffer.from(encodedItem, "base64").toString("utf8"),
+      );
+      observed.push("create:" + decoded.login.password);
+      return JSON.stringify(item);
+    },
+    async editItem() {
+      observed.push("edit");
+      return "{}";
+    },
+  });
   const created = await adapter.createSecret("Synthetic item", password);
   assert.deepEqual(created, {
     status: "created",
@@ -307,30 +305,26 @@ test("Bitwarden Password Manager updates one exact field while preserving siblin
       password: "new-password",
     },
   };
-  const adapter = await adapterFor(
-    {
-      async ensureSession() {
-        return profileIdentity;
-      },
-      async readItem(appName, requestedId) {
-        return JSON.stringify(
-          observed.includes("edited") ? updatedItem : item,
-        );
-      },
-      async createItem() {
-        throw new Error("unexpected create");
-      },
-      async editItem(appName, requestedId, encodedItem) {
-        observed.push("edited");
-        const decoded = JSON.parse(
-          Buffer.from(encodedItem, "base64").toString("utf8"),
-        );
-        assert.equal(decoded.login.password, "new-password");
-        assert.equal(decoded.login.username, "sibling-username");
-        return JSON.stringify(updatedItem);
-      },
+  const adapter = await adapterFor({
+    async ensureSession() {
+      return profileIdentity;
     },
-  );
+    async readItem(appName, requestedId) {
+      return JSON.stringify(observed.includes("edited") ? updatedItem : item);
+    },
+    async createItem() {
+      throw new Error("unexpected create");
+    },
+    async editItem(appName, requestedId, encodedItem) {
+      observed.push("edited");
+      const decoded = JSON.parse(
+        Buffer.from(encodedItem, "base64").toString("utf8"),
+      );
+      assert.equal(decoded.login.password, "new-password");
+      assert.equal(decoded.login.username, "sibling-username");
+      return JSON.stringify(updatedItem);
+    },
+  });
   const updated = await adapter.updateField(
     bitwardenPasswordManagerReference(itemId, "/login/password"),
     "new-password",
@@ -350,40 +344,38 @@ test("Bitwarden Password Manager updates one exact field while preserving siblin
 });
 
 test("Bitwarden Password Manager marks ambiguous write verification as outcome unknown", async () => {
-  const adapter = await adapterFor(
-    {
-      async ensureSession() {
-        return profileIdentity;
-      },
-      async readItem() {
-        return JSON.stringify({
-          id: itemId,
-          type: 1,
-          name: "Synthetic item",
-          login: { password: "different" },
-          fields: [],
-        });
-      },
-      async createItem() {
-        return JSON.stringify({
-          id: itemId,
-          type: 1,
-          name: "Synthetic item",
-          login: { password },
-          fields: [],
-        });
-      },
-      async editItem() {
-        return JSON.stringify({
-          id: itemId,
-          type: 1,
-          name: "Synthetic item",
-          login: { password: "different" },
-          fields: [],
-        });
-      },
+  const adapter = await adapterFor({
+    async ensureSession() {
+      return profileIdentity;
     },
-  );
+    async readItem() {
+      return JSON.stringify({
+        id: itemId,
+        type: 1,
+        name: "Synthetic item",
+        login: { password: "different" },
+        fields: [],
+      });
+    },
+    async createItem() {
+      return JSON.stringify({
+        id: itemId,
+        type: 1,
+        name: "Synthetic item",
+        login: { password },
+        fields: [],
+      });
+    },
+    async editItem() {
+      return JSON.stringify({
+        id: itemId,
+        type: 1,
+        name: "Synthetic item",
+        login: { password: "different" },
+        fields: [],
+      });
+    },
+  });
   await assert.rejects(
     adapter.createSecret("Synthetic item", password),
     /bitwarden_password_manager_create_outcome_unknown/,
