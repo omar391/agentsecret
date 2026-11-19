@@ -7,7 +7,7 @@ The commands below describe the consumer check for a published attested release 
 Download and verify before running the file:
 
 ```sh
-gh release download v3.0.0 --repo OWNER/REPO --pattern cli.mjs --dir .
+gh release download v3.0.1 --repo OWNER/REPO --pattern cli.mjs --dir .
 gh attestation verify ./cli.mjs \
   --repo OWNER/REPO \
   --signer-workflow OWNER/REPO/.github/workflows/cli-release.yml

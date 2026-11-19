@@ -140,7 +140,7 @@ export async function mcp(
       result = {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "agentsecret", version: "3.0.0" },
+        serverInfo: { name: "agentsecret", version: "3.0.1" },
         instructions:
           "Use aliases for authorized broker operations. Strict mode does not export credentials to local commands.",
       };

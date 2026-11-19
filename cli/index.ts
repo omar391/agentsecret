@@ -1116,7 +1116,7 @@ async function fulfillServiceAccountWrite(
           const client = await createClient({
             auth,
             integrationName: "AgentSecret",
-            integrationVersion: "3.0.0",
+            integrationVersion: "3.0.1",
           });
           return guardServiceAccountClient(client, authorizeDispatch);
         },

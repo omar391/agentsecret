@@ -4,16 +4,22 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url).pathname;
+const packageJson = JSON.parse(await readFile(root + "package.json", "utf8"));
+const releaseTag = "v" + packageJson.version;
 
 test("CLI release tag must exactly match the locked package version", () => {
   const valid = spawnSync(process.execPath, ["scripts/check-release-tag.mjs"], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, RELEASE_TAG: "v3.0.0" },
+    env: { ...process.env, RELEASE_TAG: releaseTag },
   });
   assert.equal(valid.status, 0, valid.stderr);
 
-  for (const tag of ["v3.0.1", "3.0.0", "v3.0.0-preview.1"]) {
+  for (const tag of [
+    releaseTag.slice(1),
+    releaseTag + "-preview.1",
+    releaseTag + ".1",
+  ]) {
     const invalid = spawnSync(
       process.execPath,
       ["scripts/check-release-tag.mjs"],
@@ -23,7 +29,7 @@ test("CLI release tag must exactly match the locked package version", () => {
         env: { ...process.env, RELEASE_TAG: tag },
       },
     );
-    assert.notEqual(invalid.status, 0, `${tag} must be refused`);
+    assert.notEqual(invalid.status, 0, tag + " must be refused");
   }
 });
 

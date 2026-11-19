@@ -923,7 +923,7 @@ async function routes(
   if (path === "/health" || path === "/api/info")
     return json({
       service: "agentsecret",
-      version: "3.0.0",
+      version: "3.0.1",
       profile: "strict-broker",
       configured: adapters.authority.available(),
       providers: ["bitwarden", "companion"],
