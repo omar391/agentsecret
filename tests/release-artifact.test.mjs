@@ -15,10 +15,13 @@ test("CLI release tag must exactly match the locked package version", () => {
   });
   assert.equal(valid.status, 0, valid.stderr);
 
+  const [major, minor, patch] = packageJson.version.split(".").map(Number);
+  const otherPatchTag = "v" + [major, minor, patch + 1].join(".");
   for (const tag of [
     releaseTag.slice(1),
     releaseTag + "-preview.1",
     releaseTag + ".1",
+    otherPatchTag,
   ]) {
     const invalid = spawnSync(
       process.execPath,
