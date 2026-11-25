@@ -38,6 +38,10 @@ export interface SbxArgvPlan {
   sandbox_policy_audit: string[];
   allow_rules: string[][];
   verify_policy: string[];
+  mcp_add?: string[];
+  mcp_load?: string[];
+  mcp_unload?: string[];
+  mcp_remove?: string[];
   execute: string[];
   remove: string[];
   staged_files: { guest_path: string; mode: string; byte_length: number }[];
@@ -94,6 +98,23 @@ export interface RunOptions {
     sandboxName: string,
   ) => void;
   removeScratch?: (scratch: string) => void;
+  /**
+   * Restart probe for acceptance harnesses. When set, the runner stops the
+   * created sandbox after a successful first guest execution, re-runs the
+   * exact planned argv (Docker Sandboxes auto-restarts a stopped sandbox for
+   * exec), and requires the second execution to exit 0. Both executions use
+   * the same policy, mediation, and environment state. Runtime consumers
+   * leave this unset.
+   */
+  restartProbe?: {
+    stopArgv: string[];
+  };
+  mediation?: {
+    origin: string;
+    bindingFile: string;
+    envFile: string;
+    tokens: { envName: string; alias: string; token: string }[];
+  };
 }
 
 export type ArgvRunner = (
@@ -204,7 +225,23 @@ export async function buildRunPlan(
   const sbx = resolveBinary(sbxCandidates(), options.sbxPath);
   if (!sbx) throw new RunSpecLikeError("sbx_unavailable");
 
-  const requestJson = JSON.stringify(buildRunRequest(spec));
+  const bindings = options.mediation?.tokens.map((binding) => ({
+    envName: binding.envName,
+    placeholder: binding.token,
+  }));
+  const requestJson = JSON.stringify(
+    buildRunRequest(
+      spec,
+      bindings,
+      options.mediation
+        ? {
+            mediatorOrigin: options.mediation.origin,
+            bindingFile: options.mediation.bindingFile,
+            envFile: options.mediation.envFile,
+          }
+        : undefined,
+    ),
+  );
   const scratchParent = mkdtempSync(
     join(options.scratchParent || tmpdir(), "agentsecret-run-"),
   );
@@ -254,7 +291,10 @@ export async function buildRunPlan(
     !Array.isArray(plan.create) ||
     !Array.isArray(plan.execute) ||
     !Array.isArray(plan.remove) ||
-    !Array.isArray(plan.allow_rules)
+    !Array.isArray(plan.allow_rules) ||
+    ![plan.mcp_add, plan.mcp_load, plan.mcp_unload, plan.mcp_remove].every(
+      (argv) => argv === undefined || Array.isArray(argv),
+    )
   ) {
     cleanupScratch();
     throw new RunSpecLikeError("plan_schema_invalid");
@@ -663,6 +703,18 @@ export async function executeSbxPlan(
       plan.sandbox_name,
     );
 
+    if (
+      plan.create.length > 0 &&
+      (plan.mcp_load?.length ?? 0) > 0 &&
+      plan.mcp_add !== undefined &&
+      plan.mcp_load !== undefined
+    ) {
+      const add = await run("mcp_add", plan.mcp_add);
+      requireOk("mcp_add", add);
+      const load = await run("mcp_load", plan.mcp_load);
+      requireOk("mcp_load", load);
+    }
+
     const execute = await run("execute", plan.execute, { stream: true });
     receipt.exitCode = execute.exitCode;
     receipt.signal = execute.signal;
@@ -674,6 +726,23 @@ export async function executeSbxPlan(
     if (execute.signal) {
       receipt.status = "cancelled";
       receipt.reason = "guest_signal:" + execute.signal;
+    }
+    if (receipt.status === "completed" && options.restartProbe) {
+      const stop = await run("restart_stop", options.restartProbe.stopArgv);
+      requireOk("restart_stop", stop);
+      const restart = await run("restart_execute", plan.execute, {
+        stream: true,
+      });
+      receipt.exitCode = restart.exitCode;
+      receipt.signal = restart.signal;
+      if (restart.error)
+        throw new RunSpecLikeError("restart_execute:spawn:" + restart.error);
+      if (restart.exitCode !== 0 || restart.signal) {
+        receipt.status = "failed";
+        receipt.reason = restart.signal
+          ? "restart_guest_signal:" + restart.signal
+          : "restart_guest_exit:" + restart.exitCode;
+      }
     }
   } catch (error) {
     if (error instanceof PolicyAuditError) {
@@ -693,6 +762,30 @@ export async function executeSbxPlan(
       receipt.reason = "internal_error";
     }
   } finally {
+    if (
+      (plan.mcp_unload?.length ?? 0) > 0 &&
+      sandboxCreated &&
+      plan.mcp_unload
+    ) {
+      try {
+        const unload = await run("mcp_unload", plan.mcp_unload, {
+          capture: true,
+          signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS),
+        });
+      } catch {
+        // Registration removal below still runs; sandbox removal follows.
+      }
+    }
+    if ((plan.mcp_remove?.length ?? 0) > 0 && plan.mcp_remove) {
+      try {
+        await run("mcp_remove", plan.mcp_remove, {
+          capture: true,
+          signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS),
+        });
+      } catch {
+        // Registration removal was attempted; sandbox removal still runs.
+      }
+    }
     if (sandboxCreated || plan.remove.length > 0) {
       try {
         const remove = await run("remove", plan.remove, {

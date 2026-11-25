@@ -63,9 +63,37 @@ pub struct SbxCommandPlan {
     pub verify_policy: Vec<String>,
     /// Execute one explicit guest program and argv without a shell wrapper.
     pub execute: Vec<String>,
+    /// Register the host mediation MCP server for an approved reference run.
+    pub mcp_add: Vec<String>,
+    /// Load the mediation MCP server into this sandbox before guest execution.
+    pub mcp_load: Vec<String>,
+    /// Detach the mediation MCP server before removing the sandbox.
+    pub mcp_unload: Vec<String>,
+    /// Remove the mediation registration after the run.
+    pub mcp_remove: Vec<String>,
     /// Remove the sandbox and its scoped policy rules after completion.
     pub remove: Vec<String>,
 }
+
+/// GitHub token environment keys cleared at sandbox create.
+///
+/// Docker Sandboxes v0.53.0 places the documented proxy-managed placeholder
+/// (`gho_sbxproxymanaged000…`, not the host credential) in every agent
+/// sandbox as `GH_TOKEN`. Audited guest tools could not authenticate with
+/// that placeholder, and the create argv clears the initial values the
+/// audited runtime injects. This does not revoke the host proxy's
+/// authentication capability; the boundary's controls are the plan's
+/// fail-closed credential-mapping and effective-policy audits plus egress
+/// deny rules, which run before the sandbox executes. The runtime
+/// re-establishes its `GIT_CONFIG_COUNT` after create-time env flags; its
+/// include file is empty, so no credential is claimed there.
+const GUEST_CREDENTIAL_ENV_NEUTRALIZE: &[&str] = &[
+    "GH_TOKEN=",
+    "GITHUB_TOKEN=",
+    "GH_ENTERPRISE_TOKEN=",
+    "GITHUB_ENTERPRISE_TOKEN=",
+    "GIT_CONFIG_COUNT=0",
+];
 
 /// Compile a run plan and its staged file manifest to direct `sbx` argv.
 ///
@@ -76,8 +104,9 @@ pub struct SbxCommandPlan {
 /// it is not mounted. Staged files are mounted individually at their exact
 /// declared guest paths so read-only files receive `:ro` mounts.
 ///
-/// This compiler rejects secret reference bindings until a qualified adapter
-/// can mediate them without exposing values in guest environment or argv.
+/// Reference bindings are accepted only with a host-only mediation contract. A
+/// private binding file supplies the opaque guest tokens; provider credentials,
+/// signing keys, and broker capabilities never enter the guest.
 /// Policy audit commands are returned but not run here.
 pub fn compile_sbx_command_plan(
     plan: &ValidatedRunPlan,
@@ -86,7 +115,11 @@ pub fn compile_sbx_command_plan(
     guest_workspace: &Path,
     staged_root: &Path,
     staged_files: &[StagedFile],
+    supervisor_path: &Path,
 ) -> Result<SbxCommandPlan, DockerPolicyError> {
+    if !safe_host_path(supervisor_path) {
+        return Err(DockerPolicyError::InvalidWorkspace);
+    }
     if !valid_sandbox_name(sandbox_name)
         || !safe_host_path(primary_workspace)
         || !safe_host_path(guest_workspace)
@@ -94,15 +127,19 @@ pub fn compile_sbx_command_plan(
         || primary_workspace == guest_workspace
         || primary_workspace == staged_root
         || guest_workspace == staged_root
-        || !plan.reference_bindings.is_empty()
     {
-        return Err(if !plan.reference_bindings.is_empty() {
-            DockerPolicyError::SecretBindingUnsupported
-        } else if !valid_sandbox_name(sandbox_name) {
+        return Err(if !valid_sandbox_name(sandbox_name) {
             DockerPolicyError::InvalidSandboxName
         } else {
             DockerPolicyError::InvalidWorkspace
         });
+    }
+    let mediation = plan.mediation.as_ref();
+    match (mediation, plan.reference_bindings.is_empty()) {
+        (Some(_), true) | (None, false) => {
+            return Err(DockerPolicyError::SecretBindingUnsupported);
+        }
+        _ => {}
     }
     if staged_files.len() != plan.file_access.len() {
         return Err(DockerPolicyError::StagedFileMismatch);
@@ -127,10 +164,14 @@ pub fn compile_sbx_command_plan(
         "off".to_owned(),
         "--static-mcp".to_owned(),
         "none".to_owned(),
-        "shell".to_owned(),
-        path_string(&primary_workspace)?,
-        format!("{}:/workspace", path_string(&primary_workspace)?),
     ];
+    for neutralized in GUEST_CREDENTIAL_ENV_NEUTRALIZE {
+        create.push("--env".to_owned());
+        create.push((*neutralized).to_owned());
+    }
+    create.push("shell".to_owned());
+    create.push(path_string(&primary_workspace)?);
+    create.push(format!("{}:/workspace", path_string(&primary_workspace)?));
     for access in &plan.file_access {
         let file = staged_files
             .iter()
@@ -180,6 +221,64 @@ pub fn compile_sbx_command_plan(
         plan.executable.clone(),
     ];
     execute.extend(plan.argv.iter().cloned());
+    if let Some(mediation) = mediation {
+        let index = execute
+            .iter()
+            .position(|argument| argument == "--workdir")
+            .ok_or(DockerPolicyError::InvalidWorkspace)?;
+        execute.insert(index, "--env-file".to_owned());
+        execute.insert(index + 1, mediation.env_file.clone());
+    }
+
+    let mut mcp_add = Vec::new();
+    let mut mcp_load = Vec::new();
+    let mut mcp_unload = Vec::new();
+    let mut mcp_remove = Vec::new();
+    if let Some(mediation) = mediation {
+        let server_name = mediation_server_name(sandbox_name);
+        mcp_add = vec![
+            "--no-input".to_owned(),
+            "mcp".to_owned(),
+            "add".to_owned(),
+            server_name.clone(),
+            "--command".to_owned(),
+            "env".to_owned(),
+            "--args".to_owned(),
+            "AGENTSECRET_MEDIATOR_ORIGIN=".to_owned() + &mediation.mediator_origin,
+            "--args".to_owned(),
+            supervisor_path.to_string_lossy().into_owned(),
+            "--args".to_owned(),
+            "mcp-mediate".to_owned(),
+            "--args".to_owned(),
+            "--run-token-file".to_owned(),
+            "--args".to_owned(),
+            mediation.binding_file.clone(),
+        ];
+        mcp_load = vec![
+            "--no-input".to_owned(),
+            "mcp".to_owned(),
+            "load".to_owned(),
+            server_name.clone(),
+            "--sandbox".to_owned(),
+            sandbox_name.to_owned(),
+        ];
+        mcp_unload = vec![
+            "--no-input".to_owned(),
+            "mcp".to_owned(),
+            "unload".to_owned(),
+            server_name.clone(),
+            "--sandbox".to_owned(),
+            sandbox_name.to_owned(),
+        ];
+        mcp_remove = vec![
+            "--no-input".to_owned(),
+            "mcp".to_owned(),
+            "rm".to_owned(),
+            "--force".to_owned(),
+            "--registration-only".to_owned(),
+            server_name,
+        ];
+    }
 
     Ok(SbxCommandPlan {
         host_environment_to_remove: vec!["SSH_AUTH_SOCK".into(), "SSH_AGENT_PID".into()],
@@ -232,6 +331,10 @@ pub fn compile_sbx_command_plan(
             "json".into(),
         ],
         execute,
+        mcp_add,
+        mcp_load,
+        mcp_unload,
+        mcp_remove,
         remove: vec![
             "--no-input".into(),
             "rm".into(),
@@ -369,6 +472,10 @@ fn valid_sandbox_name(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
         && value.as_bytes()[0].is_ascii_lowercase()
         && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+}
+
+fn mediation_server_name(sandbox_name: &str) -> String {
+    format!("{sandbox_name}-mediate")
 }
 
 #[cfg(test)]
@@ -522,11 +629,12 @@ mod tests {
             &guest_workspace,
             &staged_root,
             &staged,
+            Path::new("/usr/local/bin/agentsecret-supervisor"),
         )
         .expect("command plan");
 
         assert_eq!(
-            &commands.create[..11],
+            &commands.create[..21],
             [
                 "--no-input",
                 "create",
@@ -536,14 +644,24 @@ mod tests {
                 "off",
                 "--static-mcp",
                 "none",
+                "--env",
+                "GH_TOKEN=",
+                "--env",
+                "GITHUB_TOKEN=",
+                "--env",
+                "GH_ENTERPRISE_TOKEN=",
+                "--env",
+                "GITHUB_ENTERPRISE_TOKEN=",
+                "--env",
+                "GIT_CONFIG_COUNT=0",
                 "shell",
                 primary.to_str().expect("utf8 test path"),
                 format!("{}:/workspace", primary.display()).as_str(),
             ]
         );
-        assert_eq!(commands.create.len(), 12);
+        assert_eq!(commands.create.len(), 22);
         assert_eq!(
-            commands.create[11],
+            commands.create[21],
             format!(
                 "{}:/workspace/project/config.json:ro",
                 staged_root.join("project/config.json").display()
@@ -607,8 +725,9 @@ mod tests {
         let mut plan = valid_plan();
         plan.reference_bindings.push(crate::ReferenceBinding {
             env_name: "API_TOKEN".into(),
-            alias: "synthetic-alias".into(),
+            alias: "SYNTHETIC_ALIAS".into(),
             field_path: None,
+            placeholder: None,
         });
         let files = [StagedFile {
             guest_path: "/workspace/project/config.json".into(),
@@ -623,6 +742,7 @@ mod tests {
                 Path::new("/tmp/agentsecret-run1/empty-workspace"),
                 Path::new("/tmp/agentsecret-run1/staged"),
                 &files,
+                Path::new("/usr/local/bin/agentsecret-supervisor"),
             ),
             Err(DockerPolicyError::SecretBindingUnsupported)
         );
@@ -636,6 +756,7 @@ mod tests {
                 Path::new("/tmp/agentsecret-run1/empty-workspace"),
                 Path::new("/tmp/agentsecret-run1/staged"),
                 &[],
+                Path::new("/usr/local/bin/agentsecret-supervisor"),
             ),
             Err(DockerPolicyError::StagedFileMismatch)
         );
@@ -679,6 +800,7 @@ mod tests {
             &guest_workspace,
             &staged_root,
             &staged,
+            Path::new("/usr/local/bin/agentsecret-supervisor"),
         )
         .expect("command plan");
 
@@ -722,6 +844,7 @@ mod tests {
                 &guest_workspace,
                 &staged_root,
                 &staged,
+                Path::new("/usr/local/bin/agentsecret-supervisor"),
             ),
             Err(DockerPolicyError::InvalidWorkspace)
         );
@@ -740,6 +863,7 @@ mod tests {
                 &guest_workspace,
                 &staged_root,
                 &staged,
+                Path::new("/usr/local/bin/agentsecret-supervisor"),
             ),
             Err(DockerPolicyError::StagedFileMismatch)
         );

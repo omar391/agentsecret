@@ -126,6 +126,13 @@ export async function providerJson(
     throw new HttpError(502, "invalid_vault_response");
   }
 }
+/**
+ * Encode an OAuth form request as a string. The pinned TLS transport accepts
+ * only string request bodies, so callers must never pass URLSearchParams here.
+ */
+export function formEncoded(fields: Record<string, string>): string {
+  return new URLSearchParams(fields).toString();
+}
 export async function resolveBitwarden(
   config: BitwardenConfig,
   secretId: string,
@@ -145,7 +152,7 @@ export async function resolveBitwarden(
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
+      body: formEncoded({
         grant_type: "client_credentials",
         client_id: match[1],
         client_secret: match[2],

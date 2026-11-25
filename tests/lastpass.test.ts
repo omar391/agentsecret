@@ -69,6 +69,9 @@ function runner(overrides: Partial<LastPassRunner> = {}): LastPassRunner {
         },
       ]);
     },
+    async listItems() {
+      return "2026-11-16 (none)/Synthetic item [id: 1234567890123456789] [username: ]\n";
+    },
     ...overrides,
   };
 }
@@ -212,6 +215,8 @@ test("LastPass creates, updates, and ensures through the bound noninteractive pr
     note: "synthetic note",
   };
   const observations: string[] = [];
+  let updateCalls = 0;
+  let itemCreated = false;
   const adapter = await adapterFor(home, {
     async status(profile) {
       observations.push("status:" + profile);
@@ -221,9 +226,18 @@ test("LastPass creates, updates, and ensures through the bound noninteractive pr
       observations.push("show:" + id);
       return JSON.stringify([stored]);
     },
+    async listItems(profile) {
+      observations.push("list:" + profile);
+      return itemCreated
+        ? "2026-11-16 (none)/Synthetic item [id: " +
+            accountId +
+            "] [username: ]\n"
+        : "";
+    },
     async createItem(profile, name, notes) {
       observations.push("create:" + name + ":" + notes);
-      return "item " + accountId + " created\n";
+      itemCreated = true;
+      return "";
     },
     async updateField(profile, id, field, value) {
       observations.push("update:" + id + ":" + field + ":" + value);
@@ -256,7 +270,9 @@ test("LastPass creates, updates, and ensures through the bound noninteractive pr
   assert.equal(unchanged.status, "unchanged");
   assert.deepEqual(observations, [
     "status:" + home,
+    "list:" + home,
     "create:Synthetic item:" + password,
+    "list:" + home,
     "show:" + accountId,
     "status:" + home,
     "show:" + accountId,
@@ -270,6 +286,7 @@ test("LastPass creates, updates, and ensures through the bound noninteractive pr
 test("LastPass write results are reference-only and ambiguous outcomes stay unknown", async (t) => {
   const home = profileHome();
   t.after(() => rmSync(home, { recursive: true, force: true }));
+  let createdOnce = false;
   const adapter = await adapterFor(home, {
     async status() {
       return "Logged in as isolated@example.invalid.\n";
@@ -285,7 +302,13 @@ test("LastPass write results are reference-only and ambiguous outcomes stay unkn
       ]);
     },
     async createItem() {
-      return "item " + accountId + " created\n";
+      createdOnce = true;
+      return "";
+    },
+    async listItems() {
+      return createdOnce
+        ? "2026-11-16 (none)/Synthetic item [id: 2222222222222222222]\n2026-11-16 (none)/Synthetic item [id: 3333333333333333333]\n"
+        : "";
     },
     async updateField() {},
   });
@@ -297,4 +320,88 @@ test("LastPass write results are reference-only and ambiguous outcomes stay unkn
     adapter.updateField(accountId + "#/password", "new-password"),
     /lastpass_update_outcome_unknown/,
   );
+});
+
+test("LastPass update ignores managed timestamps but catches changed siblings", async (t) => {
+  const home = profileHome();
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  let stored = {
+    id: accountId,
+    name: "Synthetic item",
+    username: "synthetic-user",
+    password,
+    note: "synthetic note",
+    url: "https://example.invalid",
+    last_modified_gmt: "1794850000",
+    last_touch: "0",
+  };
+  let updateCalls = 0;
+  const adapter = await adapterFor(home, {
+    async status() {
+      return "Logged in as isolated@example.invalid.\n";
+    },
+    async showItem() {
+      return JSON.stringify([stored]);
+    },
+    async updateField(_home, _id, field, value) {
+      updateCalls += 1;
+      stored = {
+        ...stored,
+        [field]: value,
+        // The second sync also changes a sibling that the command never
+        // claimed to touch, which the read-back comparison must catch.
+        ...(updateCalls === 2 ? { username: "unexpected-user" } : {}),
+        last_modified_gmt: "1794859999",
+        last_touch: "1",
+      };
+    },
+  });
+  const updated = await adapter.updateField(
+    accountId + "#/password",
+    "new-password",
+  );
+  assert.equal(updated.status, "updated");
+
+  await assert.rejects(
+    adapter.updateField(accountId + "#/password", "another-password"),
+    /lastpass_update_outcome_unknown/,
+  );
+});
+
+test("LastPass create polls past a transient unresolved listing", async (t) => {
+  const home = profileHome();
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  let listings = 0;
+  const adapter = await adapterFor(home, {
+    async status() {
+      return "Logged in as isolated@example.invalid.\n";
+    },
+    async showItem() {
+      return JSON.stringify([
+        {
+          id: accountId,
+          name: "Synthetic item",
+          password,
+          username: "synthetic-user",
+        },
+      ]);
+    },
+    async listItems() {
+      listings += 1;
+      if (listings < 3)
+        return "2026-11-16 (none)/Synthetic item [id: 0] [username: ]\n";
+      return (
+        "2026-11-16 (none)/Synthetic item [id: " +
+        accountId +
+        "] [username: ]\n"
+      );
+    },
+    async createItem() {
+      return "";
+    },
+    async updateField() {},
+  });
+  const created = await adapter.createSecret("Synthetic item", password);
+  assert.equal(created.status, "created");
+  assert.equal(listings, 3);
 });

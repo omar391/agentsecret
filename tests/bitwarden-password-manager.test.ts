@@ -291,6 +291,7 @@ test("Bitwarden Password Manager updates one exact field while preserving siblin
     login: {
       username: "sibling-username",
       password: "old-password",
+      passwordRevisionDate: "2026-11-15T00:00:00.000Z",
       uris: [{ uri: "https://example.invalid" }],
     },
     fields: [
@@ -303,6 +304,7 @@ test("Bitwarden Password Manager updates one exact field while preserving siblin
     login: {
       ...item.login,
       password: "new-password",
+      passwordRevisionDate: "2026-11-16T00:00:00.000Z",
     },
   };
   const adapter = await adapterFor({
@@ -341,6 +343,43 @@ test("Bitwarden Password Manager updates one exact field while preserving siblin
     "new-password",
   );
   assert.equal(unchanged.status, "unchanged");
+});
+
+test("Bitwarden managed password metadata does not excuse a changed sibling value", async () => {
+  let edited = false;
+  const before = {
+    id: itemId,
+    type: 1,
+    login: { username: "keep", password: "old", passwordRevisionDate: null },
+    fields: [],
+  };
+  const after = {
+    ...before,
+    login: {
+      username: "unexpected-change",
+      password: "new",
+      passwordRevisionDate: "2026-11-16T00:00:00.000Z",
+    },
+  };
+  const adapter = await adapterFor({
+    async ensureSession() {
+      return profileIdentity;
+    },
+    async readItem() {
+      return JSON.stringify(edited ? after : before);
+    },
+    async createItem() {
+      throw new Error("unexpected create");
+    },
+    async editItem() {
+      edited = true;
+      return JSON.stringify(after);
+    },
+  });
+  await assert.rejects(
+    adapter.updateField(itemId + "#/login/password", "new"),
+    /bitwarden_password_manager_update_outcome_unknown/,
+  );
 });
 
 test("Bitwarden Password Manager marks ambiguous write verification as outcome unknown", async () => {

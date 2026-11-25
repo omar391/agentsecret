@@ -93,14 +93,29 @@ test("managed reference bindings stay value-free and fail closed upstream", () =
       fieldPath: "/login/password",
     },
   ]);
-  const request = buildRunRequest(spec);
+  const placeholder = "ASRC1.EXAMPLE_API." + "A".repeat(43);
+  const request = buildRunRequest(
+    spec,
+    [{ envName: "API_TOKEN", placeholder }],
+    {
+      mediatorOrigin: "http://127.0.0.1:49151",
+      bindingFile: "/tmp/agentsecret-bindings.json",
+      envFile: "/tmp/agentsecret-guest.env",
+    },
+  );
   assert.deepEqual(request.reference_bindings, [
     {
       env_name: "API_TOKEN",
       alias: "EXAMPLE_API",
       field_path: "/login/password",
+      placeholder,
     },
   ]);
+  assert.deepEqual(request.mediation, {
+    mediator_origin: "http://127.0.0.1:49151",
+    binding_file: "/tmp/agentsecret-bindings.json",
+    env_file: "/tmp/agentsecret-guest.env",
+  });
   assert.equal(JSON.stringify(request).includes("value"), false);
 
   for (const invalid of [
@@ -108,9 +123,14 @@ test("managed reference bindings stay value-free and fail closed upstream", () =
     "API_TOKEN=EXAMPLE_API",
     "API_TOKEN=EXAMPLE_API#",
     "API_TOKEN=example-api#/",
+    "API_TOKEN=EXAMPLE-API#/",
+    "API_TOKEN=EXAMPLE.API#/",
+    "API_TOKEN=1EXAMPLE#/",
+    "API_TOKEN=" + "A".repeat(65) + "#/",
     "PATH=EXAMPLE_API#/",
     "AGENTSECRET_X=EXAMPLE_API#/",
     "API_TOKEN=EXAMPLE_API#/x\u0000y",
+    "API_TOKEN=EXAMPLE_API#/x\ty",
   ]) {
     assert.throws(
       () =>
@@ -136,6 +156,23 @@ test("managed reference bindings stay value-free and fail closed upstream", () =
         hostRoot,
       ),
     /run_reference_binding_duplicate/,
+  );
+  assert.throws(
+    () => buildRunRequest(spec, [{ envName: "API_TOKEN", placeholder }]),
+    /run_mediation_required/,
+  );
+  assert.throws(
+    () =>
+      buildRunRequest(
+        parseRunArgs(["--", "/usr/bin/true"], hostRoot),
+        undefined,
+        {
+          mediatorOrigin: "http://127.0.0.1:49151",
+          bindingFile: "/tmp/agentsecret-bindings.json",
+          envFile: "/tmp/agentsecret-guest.env",
+        },
+      ),
+    /run_mediation_unnecessary/,
   );
   const tooMany = [
     "--file",
@@ -370,6 +407,61 @@ const lifecyclePlan = (scratch: string, removeArgv = ["rm"]) => ({
   execute: ["exec"],
   remove: removeArgv,
   staged_files: [],
+});
+
+test("optional restart probe re-runs the same argv after a stop between execute and cleanup", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "agentsecret-restart-test-"));
+  const emptySecrets = JSON.stringify([]);
+  const calls: string[] = [];
+  const receipt = await executeSbxPlan(lifecyclePlan(scratch), "sbx", {
+    hostRoot,
+    restartProbe: { stopArgv: ["stop", "agentsecret-run-test"] },
+    verifyPolicyAudit: () => {},
+    runArgv: async (argv) => {
+      calls.push(argv.slice(1).join(" "));
+      if (argv.includes("secret"))
+        return { exitCode: 0, signal: null, stdout: emptySecrets };
+      return { exitCode: 0, signal: null, stdout: JSON.stringify({}) };
+    },
+  });
+
+  assert.equal(receipt.status, "completed", receipt.reason);
+  const executeCalls = calls.filter((call) => call === "exec");
+  assert.deepEqual(executeCalls, ["exec", "exec"]);
+  assert.ok(calls.includes("stop agentsecret-run-test"));
+  assert.ok(calls.indexOf("stop agentsecret-run-test") > executeCalls.length);
+  assert.ok(
+    receipt.stages.some((stage) => stage.stage === "restart_stop") &&
+      receipt.stages.some((stage) => stage.stage === "restart_execute"),
+  );
+  assert.equal(receipt.cleanup.sandboxRemoved, true);
+  rmSync(scratch, { recursive: true, force: true });
+});
+
+test("restart probe failure marks the receipt failed while cleanup still runs", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "agentsecret-restart-fail-"));
+  const emptySecrets = JSON.stringify([]);
+  let removed = false;
+  const receipt = await executeSbxPlan(lifecyclePlan(scratch), "sbx", {
+    hostRoot,
+    restartProbe: { stopArgv: ["stop", "agentsecret-run-test"] },
+    verifyPolicyAudit: () => {},
+    runArgv: async (argv) => {
+      if (argv.includes("secret"))
+        return { exitCode: 0, signal: null, stdout: emptySecrets };
+      if (argv.at(-1) === "agentsecret-run-test" && argv.includes("stop"))
+        return { exitCode: 1, signal: null };
+      if (argv.includes("rm")) removed = true;
+      return { exitCode: 0, signal: null, stdout: JSON.stringify({}) };
+    },
+  });
+
+  assert.equal(receipt.status, "failed", receipt.reason);
+  assert.equal(receipt.reason, "restart_stop:exit:1");
+  assert.equal(removed, true);
+  assert.equal(receipt.cleanup.sandboxRemoved, true);
+  assert.equal(receipt.cleanup.scratchRemoved, true);
+  rmSync(scratch, { recursive: true, force: true });
 });
 
 test("immediate destination EPIPE becomes a failed receipt while cleanup still runs", async () => {

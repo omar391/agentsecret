@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cli = join(root, "dist", "cli.mjs");
 const alias = "CODEX_HOST";
+const serverName = "agentsecret";
 const allowedUrl = "https://api.github.com/check";
 const deniedUrl = "https://denied.github.com/check";
 const issuer = "https://token.actions.githubusercontent.com";
@@ -13,9 +14,6 @@ const ref = "refs/heads/main";
 const repositoryId = "123";
 const codexTimeoutMs = 150_000;
 const CODEX_PROXY_TOOL_NAME = "proxy_http_request";
-
-export const CODEX_HOST_PROMPT =
-  "Use only the agentsecret MCP server. Call proxy_http_request exactly once with secret_alias CODEX_HOST, URL https://api.github.com/check, method GET. Then call proxy_http_request exactly once with secret_alias CODEX_HOST, URL https://denied.github.com/check, method GET. This is synthetic local acceptance: https://denied.github.com/check is the required negative authorization case, so do not ask for approval or refuse it; still call the MCP tool exactly once. Do not use shell or any other tool. Return only a JSON object with allowed_status and denied_status.";
 
 let liveRuntime;
 
@@ -195,7 +193,7 @@ export function codexExecutable(env = process.env) {
     : "codex";
 }
 
-export function buildCodexInvocation({
+export function buildAppServerInvocation({
   cli,
   origin,
   configDir,
@@ -231,14 +229,9 @@ export function buildCodexInvocation({
   return {
     executable: codexExecutable(env),
     args: [
-      "exec",
-      "--ephemeral",
-      "--json",
-      "--ignore-user-config",
-      "--skip-git-repo-check",
-      "--approve-for-me",
-      "-C",
-      "/tmp",
+      "app-server",
+      "--listen",
+      "stdio://",
       "-c",
       "mcp_servers.agentsecret.command=" + JSON.stringify(execPath),
       "-c",
@@ -248,7 +241,6 @@ export function buildCodexInvocation({
       "mcp_servers.agentsecret.env={ AGENTSECRET_CONFIG_DIR = " +
         JSON.stringify(configDir) +
         " }",
-      CODEX_HOST_PROMPT,
     ],
   };
 }
@@ -272,6 +264,108 @@ export function validateCodexToolInvocation({ tools, calls } = {}) {
     advertisedTool: CODEX_PROXY_TOOL_NAME,
     advertisedSchema: schema,
     validatedCalls: calls.length,
+  };
+}
+
+export function advertisedCodexToolsFromStatus(status) {
+  if (!isPlainRecord(status))
+    throw new Error("codex_host_advertised_tools_invalid");
+  const servers = status.data;
+  if (!Array.isArray(servers) || servers.length !== 1)
+    throw new Error("codex_host_advertised_tools_invalid");
+  const server = servers[0];
+  if (
+    !isPlainRecord(server) ||
+    server.name !== serverName ||
+    server.runtimeStatus !== "connected" ||
+    !isPlainRecord(server.tools)
+  )
+    throw new Error("codex_host_advertised_tools_invalid");
+  const tools = Object.values(server.tools).map((tool) => ({
+    name: tool?.name,
+    inputSchema: tool?.inputSchema,
+  }));
+  const schema = advertisedProxySchema(tools);
+  return { server, tools, schema };
+}
+
+export function validateCodexToolResult(result, expected) {
+  if (!isPlainRecord(result) || !Array.isArray(result.content))
+    throw new Error("codex_host_tool_result_invalid");
+  if (expected === "allowed") {
+    if (result.isError === true)
+      throw new Error("codex_host_policy_enforcement_failed");
+    return { status: "allowed" };
+  }
+  if (expected === "denied") {
+    if (result.isError !== true)
+      throw new Error("codex_host_policy_enforcement_failed");
+    const codes = result.content
+      .map((part) =>
+        typeof part?.text === "string"
+          ? /^([a-z][a-z0-9_]{1,79})$/.exec(part.text.trim())?.[1]
+          : undefined,
+      )
+      .filter(Boolean);
+    if (!codes.includes("policy_denied"))
+      throw new Error("codex_host_policy_enforcement_failed");
+    return { status: "policy_denied", codes };
+  }
+  throw new Error("codex_host_tool_result_invalid");
+}
+
+export function buildAppServerRequests({ threadId }) {
+  if (typeof threadId !== "string" || !threadId)
+    throw new Error("codex_host_app_server_thread_invalid");
+  return {
+    initialize: {
+      method: "initialize",
+      params: {
+        clientInfo: {
+          name: "agentsecret-codex-host-acceptance",
+          title: "AgentSecret Codex Host Acceptance",
+          version: "0.1.0",
+        },
+      },
+    },
+    threadStart: {
+      method: "thread/start",
+      params: { cwd: process.cwd(), ephemeral: true },
+    },
+    statusList: {
+      method: "mcpServerStatus/list",
+      params: {
+        serverName,
+        threadId,
+        detail: "toolsAndAuthOnly",
+      },
+    },
+    allowedCall: {
+      method: "mcpServer/tool/call",
+      params: {
+        server: serverName,
+        threadId,
+        tool: CODEX_PROXY_TOOL_NAME,
+        arguments: {
+          secret_alias: alias,
+          url: allowedUrl,
+          method: "GET",
+        },
+      },
+    },
+    deniedCall: {
+      method: "mcpServer/tool/call",
+      params: {
+        server: serverName,
+        threadId,
+        tool: CODEX_PROXY_TOOL_NAME,
+        arguments: {
+          secret_alias: alias,
+          url: deniedUrl,
+          method: "GET",
+        },
+      },
+    },
   };
 }
 
@@ -533,6 +627,172 @@ async function runCodex(executable, args, options) {
   }
 }
 
+export class AppServerSession {
+  constructor(
+    executable,
+    args,
+    options,
+    credentials,
+    runtime = liveRuntime,
+    { timeoutMs = codexTimeoutMs } = {},
+  ) {
+    this.executable = executable;
+    this.args = args;
+    this.options = options;
+    this.credentials = credentials;
+    this.runtime = runtime;
+    this.timeoutMs = timeoutMs;
+    this.nextId = 1;
+    this.pending = new Map();
+    this.notifications = [];
+    this.buffer = "";
+    this.stdout = "";
+    this.stderr = "";
+    this.timedOut = false;
+  }
+
+  start() {
+    this.child = this.runtime.spawn(this.executable, this.args, {
+      ...this.options,
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.closed = new Promise((resolveClose, rejectClose) => {
+      this.child.once("error", rejectClose);
+      this.child.once("close", (code, signal) =>
+        resolveClose({ code, signal }),
+      );
+    });
+    this.outputFailure = null;
+    this.child.stdout.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      this.stdout += text;
+      try {
+        assertNoCredentialReflection(text, this.credentials);
+      } catch (error) {
+        this.outputFailure = error;
+        this.settlePending(error);
+        void this.close().catch(() => {});
+        return;
+      }
+      this.buffer += text;
+      let index;
+      while ((index = this.buffer.indexOf("\n")) >= 0) {
+        const line = this.buffer.slice(0, index);
+        this.buffer = this.buffer.slice(index + 1);
+        this.receiveLine(line);
+      }
+    });
+    this.child.stderr.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      this.stderr += text;
+      try {
+        assertNoCredentialReflection(text, this.credentials);
+      } catch (error) {
+        this.outputFailure = error;
+        this.settlePending(error);
+        void this.close().catch(() => {});
+      }
+    });
+    this.child.stdin.on("error", () => {
+      this.handleInputFailure();
+    });
+    this.timeout = setTimeout(() => {
+      this.timedOut = true;
+      this.close();
+    }, this.timeoutMs);
+  }
+
+  receiveLine(line) {
+    if (!line) return;
+    let message;
+    try {
+      message = JSON.parse(line);
+    } catch {
+      this.notifications.push({ parseError: true });
+      return;
+    }
+    if (
+      isPlainRecord(message) &&
+      message.id !== undefined &&
+      this.pending.has(message.id)
+    ) {
+      const entry = this.pending.get(message.id);
+      this.pending.delete(message.id);
+      clearTimeout(entry.timer);
+      entry.resolve(message);
+      return;
+    }
+    this.notifications.push({
+      method: isPlainRecord(message) ? message.method : undefined,
+    });
+  }
+
+  settlePending(error) {
+    for (const entry of this.pending.values()) {
+      clearTimeout(entry.timer);
+      this.pending.delete(entry.id);
+      entry.reject(error);
+    }
+    this.pending.clear();
+  }
+
+  handleInputFailure() {
+    if (this.inputFailure) return;
+    this.inputFailure = new Error("codex_host_app_server_unavailable");
+    this.settlePending(this.inputFailure);
+    void this.close().catch(() => {});
+  }
+
+  request({ method, params }) {
+    if (!this.child?.stdin?.writable)
+      return Promise.reject(new Error("codex_host_app_server_unavailable"));
+    if (this.outputFailure) return Promise.reject(this.outputFailure);
+    if (this.inputFailure) return Promise.reject(this.inputFailure);
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("codex_host_app_server_request_timeout"));
+      }, this.timeoutMs);
+      timer.unref?.();
+      this.pending.set(id, { id, resolve, reject, timer });
+      this.child.stdin.write(
+        JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n",
+        (error) => {
+          if (error) {
+            clearTimeout(timer);
+            if (this.pending.get(id)) {
+              this.pending.delete(id);
+              reject(new Error("codex_host_app_server_unavailable"));
+            }
+          }
+        },
+      );
+    });
+  }
+
+  async close(options = {}) {
+    if (this.timeout) clearTimeout(this.timeout);
+    if (this.closing) return this.closePromise ?? this.closed;
+    this.settlePending(new Error("codex_host_app_server_unavailable"));
+    this.closing = true;
+    const failure = this.outputFailure;
+    terminate(this.child, "SIGKILL");
+    this.closePromise = this.closed.then(
+      (result) => {
+        if (failure) throw failure;
+        return result;
+      },
+      (error) => {
+        if (failure) throw failure;
+        throw error;
+      },
+    );
+    return this.closePromise;
+  }
+}
+
 function assertNoCredentialReflection(value, credentials) {
   for (const credential of credentials) {
     if (credential && value.includes(credential))
@@ -779,48 +1039,119 @@ async function main() {
     if (loginResult.code !== 0)
       throw new Error("codex_host_device_enrollment_failed");
 
-    phase = "codex_exec";
-    const invocation = buildCodexInvocation({
+    phase = "codex_app_server";
+    const invocation = buildAppServerInvocation({
       cli,
       origin: originRef.current,
       configDir,
       execPath: process.execPath,
     });
-    const codexResult = await runCodex(invocation.executable, invocation.args, {
-      cwd: scratch,
-      env: { ...process.env },
-    });
-    if (codexResult.timedOut) throw new Error("codex_host_run_timeout");
-    if (codexResult.code !== 0) throw new Error("codex_host_run_failed");
-    phase = "codex_result_review";
-    assertNoCredentialReflection(codexResult.stdout + codexResult.stderr, [
-      customerSession,
-      syntheticCredential,
-      connectToken,
-    ]);
-
-    let toolValidation;
+    const credentials = [customerSession, syntheticCredential, connectToken];
+    const codexHome = join(scratch, "codex-home");
+    await mkdir(codexHome, { recursive: true });
+    const session = new AppServerSession(
+      invocation.executable,
+      invocation.args,
+      {
+        cwd: scratch,
+        env: { ...process.env, CODEX_HOME: codexHome },
+      },
+      credentials,
+    );
+    session.start();
+    const requests = {};
+    let threadId;
+    let advertised;
+    let allowedResult;
+    let deniedResult;
     try {
-      toolValidation = validateCodexToolInvocation({
-        tools: observations.tools,
-        calls: observations.calls,
+      const initializeResponse = await session.request({
+        method: "initialize",
+        params: {
+          clientInfo: {
+            name: "agentsecret-codex-host-acceptance",
+            title: "AgentSecret Codex Host Acceptance",
+            version: "0.1.0",
+          },
+        },
       });
-    } catch (error) {
-      process.stderr.write(
-        JSON.stringify({
-          codexVersion,
-          result:
-            error instanceof Error
-              ? error.message
-              : "codex_host_acceptance_failed",
-          mcpMethods: observations.mcpMethods,
-          toolNames: observations.toolNames,
-          advertisedTools: observations.tools.length,
-          toolCalls: observations.calls.map(safeCallPreview),
-        }) + "\n",
+      if (initializeResponse.error)
+        throw new Error("codex_host_app_server_initialize_failed");
+      const threadResponse = await session.request({
+        method: "thread/start",
+        params: { cwd: scratch, ephemeral: true },
+      });
+      if (threadResponse.error)
+        throw new Error("codex_host_app_server_thread_start_failed");
+      threadId = threadResponse.result?.thread?.id;
+      if (typeof threadId !== "string" || !threadId)
+        throw new Error("codex_host_app_server_thread_start_failed");
+      const statusRequest = {
+        method: "mcpServerStatus/list",
+        params: {
+          serverName,
+          threadId,
+          detail: "toolsAndAuthOnly",
+        },
+      };
+      requests.statusList = statusRequest;
+      const statusResponse = await session.request(statusRequest);
+      if (statusResponse.error)
+        throw new Error("codex_host_mcp_server_unavailable");
+      advertised = advertisedCodexToolsFromStatus(statusResponse.result);
+      requests.allowedCall = {
+        method: "mcpServer/tool/call",
+        params: {
+          server: serverName,
+          threadId,
+          tool: CODEX_PROXY_TOOL_NAME,
+          arguments: {
+            secret_alias: alias,
+            url: allowedUrl,
+            method: "GET",
+          },
+        },
+      };
+      const allowedResponse = await session.request(requests.allowedCall);
+      if (allowedResponse.error)
+        throw new Error("codex_host_policy_enforcement_failed");
+      allowedResult = validateCodexToolResult(
+        allowedResponse.result,
+        "allowed",
       );
-      throw error;
+      requests.deniedCall = {
+        method: "mcpServer/tool/call",
+        params: {
+          server: serverName,
+          threadId,
+          tool: CODEX_PROXY_TOOL_NAME,
+          arguments: {
+            secret_alias: alias,
+            url: deniedUrl,
+            method: "GET",
+          },
+        },
+      };
+      const deniedResponse = await session.request(requests.deniedCall);
+      if (deniedResponse.error)
+        throw new Error("codex_host_policy_enforcement_failed");
+      deniedResult = validateCodexToolResult(deniedResponse.result, "denied");
+    } finally {
+      await session.close();
     }
+    if (session.timedOut) throw new Error("codex_host_run_timeout");
+    phase = "codex_result_review";
+    assertNoCredentialReflection(session.stdout + session.stderr, credentials);
+
+    const toolValidation = validateCodexToolInvocation({
+      tools: advertised.tools,
+      calls: [requests.allowedCall.params, requests.deniedCall.params].map(
+        (params) => ({
+          name: params.tool,
+          arguments: params.arguments,
+        }),
+      ),
+    });
     const advertisedSchemaDigest = createHash("sha256")
       .update(JSON.stringify(toolValidation.advertisedSchema))
       .digest("hex");
@@ -840,17 +1171,6 @@ async function main() {
         call.method === "GET",
     ).length;
     if (allowedCalls !== 1 || deniedCalls !== 1) {
-      const eventTypes = codexResult.stdout
-        .split(/\r?\n/)
-        .filter(Boolean)
-        .map((line) => {
-          try {
-            const event = JSON.parse(line);
-            return typeof event.type === "string" ? event.type : "unknown";
-          } catch {
-            return "non_json";
-          }
-        });
       process.stderr.write(
         JSON.stringify({
           codexVersion,
@@ -861,9 +1181,8 @@ async function main() {
           connectAuthMatches: observations.connectAuthMatches,
           allowedDispatches: observations.allowedDispatches,
           toolErrors: observations.toolErrors,
-          eventTypes,
           advertisedSchemaDigest,
-          assistantMessage: safeCodexMessagePreview(codexResult.stdout),
+          appServerNotifications: session.notifications.length,
         }) + "\n",
       );
       throw new Error("codex_host_tool_invocations_incomplete");
@@ -942,6 +1261,8 @@ async function main() {
         result: reason,
         phase,
         errorName: error?.name,
+        errorMessage: error?.message,
+        errorStack: error?.stack?.split("\n").slice(0, 4).join(" | "),
         errorCode,
       }) + "\n",
     );

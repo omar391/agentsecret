@@ -192,15 +192,14 @@ export function equal(a: string, b: string): boolean {
     result |= (x[i] || 0) ^ (y[i] || 0);
   return result === 0;
 }
-export async function readText(
+export async function readBytes(
   response: Response | Request,
   max = 1024 * 1024,
-  fatalUtf8 = false,
-): Promise<string> {
+): Promise<Uint8Array> {
   const advertised = Number(response.headers.get("content-length"));
   if (Number.isFinite(advertised) && advertised > max)
     throw new HttpError(413, "payload_too_large");
-  if (!response.body) return "";
+  if (!response.body) return new Uint8Array(0);
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -224,10 +223,18 @@ export async function readText(
     joined.set(chunk, offset);
     offset += chunk.length;
   }
+  return joined;
+}
+export async function readText(
+  response: Response | Request,
+  max = 1024 * 1024,
+  fatalUtf8 = false,
+): Promise<string> {
+  const bytes = await readBytes(response, max);
   return new TextDecoder("utf-8", {
     fatal: fatalUtf8,
     ignoreBOM: false,
-  }).decode(joined);
+  }).decode(bytes);
 }
 export async function body(request: Request): Promise<Record<string, unknown>> {
   const text = await readText(request, 64 * 1024);

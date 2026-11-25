@@ -13,7 +13,7 @@
     "test:turso-adapter": "tsx --test --test-concurrency=1 tests/turso-adapter.test.ts",
     "test:node-conformance": "tsx --test --test-concurrency=1 tests/node-server-conformance.test.ts",
     "test:license-boundary": "npm run build:cli && npm run build:web && node --test --test-concurrency=1 tests/license-boundary.test.mjs",
-    "test:local-security": "tsx --test --test-concurrency=1 tests/provider-credentials.test.ts tests/onepassword-service-account.test.ts tests/bitwarden-password-manager.test.ts tests/lastpass.test.ts tests/browser-executor.test.ts tests/docker-runtime.test.ts && npm run test:license-boundary",
+    "test:local-security": "tsx --test --test-concurrency=1 tests/git-pack.test.ts tests/git-http.test.ts tests/provider-credentials.test.ts tests/onepassword-service-account.test.ts tests/bitwarden-password-manager.test.ts tests/lastpass.test.ts tests/browser-executor.test.ts tests/docker-runtime.test.ts && npm run test:license-boundary",
     "accept:macos-keychain": "tsx scripts/accept-macos-keychain.ts",
     "accept:macos-packaged-cli": "node scripts/accept-macos-packaged-cli.mjs",
     "accept:codex-host": "node scripts/accept-codex-host.mjs",

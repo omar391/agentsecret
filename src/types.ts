@@ -148,6 +148,7 @@ export interface ProxyRequestParams {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
+  response_mode?: "git";
 }
 export interface JSONRPCRequest {
   jsonrpc: "2.0";

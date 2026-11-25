@@ -140,6 +140,21 @@ fn docker_plan_cli_emits_full_command_plan_and_stages_files() {
     assert!(create_text.contains(&"--static-mcp"));
     assert!(create_text.contains(&"none"));
     assert!(create_text.contains(&"shell"));
+    // Clear the initial GitHub env values the audited runtime injects; the
+    // proxy authentication channel itself is controlled by the plan's
+    // credential-mapping and effective-policy audits, not by env value.
+    for neutralized in [
+        "GH_TOKEN=",
+        "GITHUB_TOKEN=",
+        "GH_ENTERPRISE_TOKEN=",
+        "GITHUB_ENTERPRISE_TOKEN=",
+        "GIT_CONFIG_COUNT=0",
+    ] {
+        assert!(
+            create_text.contains(&neutralized),
+            "create argv missing guest credential neutralization {neutralized}: {create_text:?}"
+        );
+    }
     // Two staged files produce two mount arguments ending in :ro / bare.
     let mounts: Vec<&&str> = create_text
         .iter()
@@ -221,7 +236,7 @@ fn docker_plan_cli_refuses_reference_bindings_before_staging() {
         {"host_path": source, "guest_path": "/workspace/config.txt", "mode": "read_only"}
     ]);
     request["reference_bindings"] = json!([
-        {"env_name": "API_TOKEN", "alias": "example-api", "field_path": "/token"}
+        {"env_name": "API_TOKEN", "alias": "EXAMPLE_API", "field_path": "/token"}
     ]);
 
     let scratch = temp.path().join("run-scratch");
@@ -231,12 +246,37 @@ fn docker_plan_cli_refuses_reference_bindings_before_staging() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).unwrap().trim(),
-        "sandbox_secret_binding_unsupported"
+        "run_request_invalid"
     );
     assert!(
         !scratch.exists(),
         "scratch must not be created for refused plans"
     );
+}
+
+#[test]
+fn docker_plan_cli_accepts_placeholders_only_with_exact_mediation() {
+    let temp = TestDir::new();
+    let root = project_root(&temp);
+    let scratch = temp.path().join("run-mediate-scratch");
+    let token = "ASRC1.EXAMPLE_API.".to_owned() + &"A".repeat(43);
+    let mut request = base_request();
+    request["reference_bindings"] = json!([
+        {"env_name": "API_TOKEN", "alias": "EXAMPLE_API", "field_path": "/token", "placeholder": token}
+    ]);
+    request["mediation"] = json!({
+        "mediator_origin": "http://127.0.0.1:49151",
+        "binding_file": "/tmp/agentsecret-bindings.json",
+        "env_file": "/tmp/agentsecret-guest.env"
+    });
+
+    let output = run_docker_plan(&root, &scratch, "agentsecret-run-med123", &request);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap().trim(),
+        "sandbox_binding_file_invalid"
+    );
+    assert!(!scratch.exists());
 }
 
 #[test]

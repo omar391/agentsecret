@@ -178,7 +178,7 @@ function isEnvName(value: string): boolean {
 }
 
 function isRunAlias(value: string): boolean {
-  return /^[A-Z][A-Z0-9_-]{0,127}$/.test(value);
+  return /^[A-Z][A-Z0-9_]{0,63}$/.test(value);
 }
 
 function isFieldPath(value: string): boolean {
@@ -278,8 +278,57 @@ export function parseRunArgs(args: string[], hostRoot: string): RunSpec {
   };
 }
 
+export interface RunBindingInput {
+  envName: string;
+  placeholder: string;
+}
+
+/** Host-only mediation contract for a run with reference bindings. */
+export interface RunMediationInput {
+  mediatorOrigin: string;
+  bindingFile: string;
+  envFile: string;
+}
+
 /** Build the closed v1 run-request JSON consumed by the supervisor. */
-export function buildRunRequest(spec: RunSpec): Record<string, unknown> {
+export function buildRunRequest(
+  spec: RunSpec,
+  bindings?: RunBindingInput[],
+  mediation?: RunMediationInput,
+): Record<string, unknown> {
+  const environment = new Map<string, string>();
+  for (const binding of bindings ?? []) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(binding.envName))
+      fail("run_binding_env_invalid");
+    if (
+      !/^ASRC1\.[A-Z][A-Z0-9_]{0,63}\.[A-Za-z0-9_-]{43}$/.test(
+        binding.placeholder,
+      )
+    )
+      fail("run_binding_token_invalid");
+    environment.set(binding.envName.toLowerCase(), binding.placeholder);
+  }
+  if (environment.size !== (bindings?.length ?? 0))
+    fail("run_binding_env_duplicate");
+  if (spec.referenceBindings.length && !mediation)
+    fail("run_mediation_required");
+  if (!spec.referenceBindings.length && mediation)
+    fail("run_mediation_unnecessary");
+  if (mediation) {
+    if (
+      !/^http:\/\/(127\.0\.0\.1|\[::1\])(:\d{1,5})?$/u.test(
+        mediation.mediatorOrigin,
+      )
+    )
+      fail("run_mediation_origin_invalid");
+    if (
+      !/^\//u.test(mediation.bindingFile) ||
+      mediation.bindingFile.includes("\u0000") ||
+      !/^\//u.test(mediation.envFile) ||
+      mediation.envFile.includes("\u0000")
+    )
+      fail("run_mediation_binding_file_invalid");
+  }
   return {
     version: 1,
     executable: spec.executable,
@@ -290,18 +339,33 @@ export function buildRunRequest(spec: RunSpec): Record<string, unknown> {
       guest_path: grant.guestPath,
       mode: grant.mode,
     })),
-    reference_bindings: spec.referenceBindings.map((binding) => ({
-      env_name: binding.envName,
-      alias: binding.alias,
-      ...(binding.fieldPath !== undefined
-        ? { field_path: binding.fieldPath }
-        : {}),
-    })),
+    reference_bindings: spec.referenceBindings.map((binding) => {
+      const placeholder = environment.get(binding.envName.toLowerCase());
+      return {
+        env_name: binding.envName,
+        alias: binding.alias,
+        ...(binding.fieldPath !== undefined
+          ? { field_path: binding.fieldPath }
+          : {}),
+        // The guest receives only an opaque token; the host keeps the
+        // per-run capability outside the guest filesystem and environment.
+        ...(placeholder !== undefined ? { placeholder } : {}),
+      };
+    }),
     egress: spec.egress.map((rule) => ({
       host: rule.host,
       method: rule.method,
       path: rule.path,
       port: 443,
     })),
+    ...(mediation
+      ? {
+          mediation: {
+            mediator_origin: mediation.mediatorOrigin,
+            binding_file: mediation.bindingFile,
+            env_file: mediation.envFile,
+          },
+        }
+      : {}),
   };
 }

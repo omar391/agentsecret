@@ -6,6 +6,13 @@ import { readFile } from "node:fs/promises";
 const root = new URL("../", import.meta.url).pathname;
 const packageJson = JSON.parse(await readFile(root + "package.json", "utf8"));
 const releaseTag = "v" + packageJson.version;
+const wrongPatch = (version) => {
+  const match = version.match(/^(\d+\.\d+)\.(\d+)([+-].*)?$/);
+  if (!match) throw new Error(`unsupported version: ${version}`);
+  const [, prefix, patch, suffix = ""] = match;
+  return `v${prefix}.${Number(patch) === 2 ? 3 : 2}${suffix}`;
+};
+const wrongPatchTag = wrongPatch(packageJson.version);
 
 test("CLI release tag must exactly match the locked package version", () => {
   const valid = spawnSync(process.execPath, ["scripts/check-release-tag.mjs"], {
@@ -15,13 +22,11 @@ test("CLI release tag must exactly match the locked package version", () => {
   });
   assert.equal(valid.status, 0, valid.stderr);
 
-  const [major, minor, patch] = packageJson.version.split(".").map(Number);
-  const otherPatchTag = "v" + [major, minor, patch + 1].join(".");
   for (const tag of [
     releaseTag.slice(1),
     releaseTag + "-preview.1",
     releaseTag + ".1",
-    otherPatchTag,
+    wrongPatchTag,
   ]) {
     const invalid = spawnSync(
       process.execPath,

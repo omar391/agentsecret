@@ -22,6 +22,7 @@ interface LastPassProfile {
 export interface LastPassRunner {
   status(profileHome: string): Promise<string>;
   showItem(profileHome: string, itemId: string): Promise<string>;
+  listItems(profileHome: string): Promise<string>;
   createItem(profileHome: string, name: string, value: string): Promise<string>;
   updateField(
     profileHome: string,
@@ -155,12 +156,53 @@ function parseItem(json: string, expectedId: string): Record<string, unknown> {
 }
 
 function parseCreatedItemId(output: string): string {
-  if (typeof output !== "string" || output.length > 4096)
+  if (typeof output !== "string" || output.length > 4096 || output.trim())
     throw new Error("lastpass_create_outcome_unknown");
-  const match = /\b([1-9][0-9]{0,19})\b/.exec(output);
-  if (!match) throw new Error("lastpass_create_outcome_unknown");
-  return match[1]!;
+  return "";
 }
+
+interface ListedLastPassItem {
+  id: string;
+}
+
+function parseCreatedItemFromListing(
+  listing: string,
+  expectedName: string,
+  excludeIds?: ReadonlySet<string>,
+): ListedLastPassItem | undefined {
+  if (typeof listing !== "string" || listing.length > 4 * 1024 * 1024)
+    throw new Error("lastpass_create_outcome_unknown");
+  const ids: string[] = [];
+  for (const line of listing.split(/[\r\n]+/)) {
+    const match = /\[id:\s*([0-9]{1,20})\]/.exec(line);
+    if (!match) continue;
+    if (excludeIds && excludeIds.has(match[1]!)) continue;
+    let title = line.slice(0, match.index).trimEnd();
+    title = title.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} /, "");
+    const separator = title.indexOf("/");
+    if (separator >= 0) title = title.slice(separator + 1);
+    if (title === expectedName && ITEM_ID.test(match[1]!)) ids.push(match[1]!);
+  }
+  if (ids.length === 0) return undefined;
+  if (ids.length !== 1) throw new Error("lastpass_create_outcome_unknown");
+  return { id: ids[0]! };
+}
+
+function parseListedItemIds(listing: string): Set<string> {
+  const ids = new Set<string>();
+  if (typeof listing !== "string" || listing.length > 4 * 1024 * 1024)
+    return ids;
+  for (const line of listing.split(/[\r\n]+/)) {
+    const match = /\[id:\s*([0-9]{1,20})\]/.exec(line);
+    if (match && ITEM_ID.test(match[1]!)) ids.add(match[1]!);
+  }
+  return ids;
+}
+
+const sleep = (milliseconds: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 
 function assertWritableValue(value: string): void {
   if (
@@ -176,10 +218,13 @@ function sameUntouchedFields(
   after: Record<string, unknown>,
   field: "password" | "username" | "note",
 ): boolean {
+  // LastPass advances both server-managed timestamps whenever an item is
+  // edited. They are not sibling data, but every other value stays checked.
+  const managedTimestamps = new Set(["last_modified_gmt", "last_touch"]);
   const normalize = (item: Record<string, unknown>) => {
     const result: Record<string, unknown> = {};
     for (const key of Object.keys(item).sort()) {
-      if (key === field) continue;
+      if (key === field || managedTimestamps.has(key)) continue;
       result[key] = item[key];
     }
     return result;
@@ -202,6 +247,9 @@ const LASTPASS_ENV = {
   LPASS_AGENT_TIMEOUT: "60",
   LPASS_DISABLE_PINENTRY: "1",
 } satisfies NodeJS.ProcessEnv;
+
+const CREATE_ID_RESOLUTION_ATTEMPTS = 8;
+const CREATE_ID_RESOLUTION_DELAY_MS = 1_000;
 
 function runLastPass(
   profileHome: string,
@@ -234,6 +282,13 @@ const systemRunner: LastPassRunner = {
       "--color=never",
       itemId,
     ]);
+  },
+  async listItems(profileHome) {
+    return runLastPass(
+      profileHome,
+      ["ls", "--sync=now", "--long", "--color=never"],
+      4 * 1024 * 1024,
+    );
   },
   async createItem(profileHome, name, value) {
     return runLastPass(
@@ -349,9 +404,28 @@ export class LastPassAdapter {
     await this.verifySession();
     let itemId: string;
     try {
+      const beforeIds = parseListedItemIds(
+        await this.runner.listItems(profile.home),
+      );
       itemId = parseCreatedItemId(
         await this.runner.createItem(profile.home, normalTitle, value),
       );
+      for (
+        let attempt = 0;
+        !itemId && attempt < CREATE_ID_RESOLUTION_ATTEMPTS;
+        attempt++
+      ) {
+        if (attempt > 0) await sleep(CREATE_ID_RESOLUTION_DELAY_MS);
+        const listed = parseCreatedItemFromListing(
+          await this.runner.listItems(profile.home),
+          normalTitle,
+          beforeIds,
+        );
+        if (listed) itemId = listed.id;
+      }
+      if (itemId && beforeIds.has(itemId))
+        throw new Error("lastpass_create_outcome_unknown");
+      if (!itemId) throw new Error("lastpass_create_outcome_unknown");
     } catch {
       throw new Error("lastpass_create_outcome_unknown");
     }

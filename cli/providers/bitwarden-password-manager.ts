@@ -259,6 +259,9 @@ function sameSiblingFields(
   const without = (item: BitwardenItem) => {
     const login = normalizeLogin(item.login);
     if (typeof updatedField === "string") delete login[updatedField];
+    // Bitwarden advances this managed timestamp when the password changes.
+    // It remains a checked sibling when updating any other field.
+    if (updatedField === "password") delete login.passwordRevisionDate;
     const fields = normalizeCustomFields(item.fields).filter(
       (field) =>
         typeof updatedField !== "object" ||
@@ -496,7 +499,6 @@ export class BitwardenPasswordManagerAdapter {
   }
 }
 
-const FASTFLOW_BIN = join(homedir(), ".local", "bin", "fastflow");
 const FASTFLOW_BW_BIN = join(homedir(), ".local", "bin", "fastflow-bw");
 
 function fastflowEnvironment(appName: string): NodeJS.ProcessEnv {
@@ -529,21 +531,10 @@ function runFastflow(
 
 const fastflowBwRunner: BitwardenPasswordManagerRunner = {
   async ensureSession(appName) {
-    const output = runFastflow(
-      FASTFLOW_BIN,
-      ["secrets", "session", "ensure", "--store", "bitwarden-cli"],
-      appName,
-    );
-    let response: unknown;
-    try {
-      response = JSON.parse(output);
-    } catch {
-      throw new Error("bitwarden_password_manager_session_unavailable");
-    }
-    const result = isRecord(response) ? response.result : undefined;
-    const secretStore = isRecord(result) ? result.secretStore : undefined;
-    if (!isRecord(secretStore) || secretStore.cliState !== "unlocked")
-      throw new Error("bitwarden_password_manager_session_unavailable");
+    // The protected wrapper restores its persisted enrollment/session and
+    // audits the selected CLI itself. A separate shared-daemon probe may use
+    // a different CLI release and must not veto this exact local runtime.
+    // A locked, malformed or wrong-account result still fails closed below.
     const statusOutput = runFastflow(
       FASTFLOW_BW_BIN,
       ["--raw", "status"],
@@ -562,12 +553,17 @@ const fastflowBwRunner: BitwardenPasswordManagerRunner = {
       !/^[A-Za-z0-9_-]{1,128}$/.test(status.userId) ||
       typeof status.userEmail !== "string" ||
       !/^[^\s@]{1,128}@[^\s@]{1,253}$/.test(status.userEmail) ||
-      typeof status.serverUrl !== "string"
+      (status.serverUrl !== null && typeof status.serverUrl !== "string")
     )
       throw new Error("bitwarden_password_manager_session_unavailable");
     let server: URL;
     try {
-      server = new URL(status.serverUrl);
+      // The audited CLI reports null for an unset base URL. Keep its exact
+      // default configuration identity instead of confusing null with a locked
+      // session or guessing a custom API/web-vault endpoint.
+      server = new URL(
+        status.serverUrl === null ? "https://bitwarden.com" : status.serverUrl,
+      );
     } catch {
       throw new Error("bitwarden_password_manager_session_unavailable");
     }
@@ -587,6 +583,10 @@ const fastflowBwRunner: BitwardenPasswordManagerRunner = {
     };
   },
   async readItem(appName, itemId) {
+    // `bw get item` reads the local cache. Require a successful provider sync
+    // before serving a value or verifying a write; offline/stale cached data
+    // must not substitute for current provider authorization and readback.
+    runFastflow(FASTFLOW_BW_BIN, ["--raw", "sync"], appName);
     return runFastflow(
       FASTFLOW_BW_BIN,
       ["--raw", "get", "item", itemId],

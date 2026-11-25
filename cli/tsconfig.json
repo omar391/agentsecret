@@ -12,6 +12,8 @@
   "include": [
     "./**/*.ts",
     "../protocol/dpop.ts",
+    "../protocol/store.ts",
+    "../cli/store.ts",
     "../src/security/primitives.ts",
     "../protocol/executor-id.ts"
   ]

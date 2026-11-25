@@ -136,6 +136,11 @@ export async function mcp(
   if (message.id === undefined) return new Response(null, { status: 202 });
   let result: unknown;
   switch (message.method) {
+    // Claude Code 2.1.311 probes lazy stdio servers with server/discover before
+    // initialize and performs no further handshake when the method is unknown.
+    case "server/discover":
+      result = { serverCapabilities: { tools: {} } };
+      break;
     case "initialize":
       result = {
         protocolVersion: "2025-06-18",
@@ -671,6 +676,12 @@ export async function mcp(
           ) {
             throw new HttpError(409, "secret_binding_unsupported");
           }
+          if (
+            config.type === "bitwarden-password-manager" ||
+            config.type === "onepassword-service-account" ||
+            config.type === "lastpass"
+          )
+            throw new HttpError(503, "secret_store_unavailable");
           await authority(env, principal.tenant, {
             op: "rate",
             key:

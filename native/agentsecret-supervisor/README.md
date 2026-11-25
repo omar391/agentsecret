@@ -85,3 +85,23 @@ boundary.
 Cargo build outputs must remain outside this crate and repository. Set
 `CARGO_TARGET_DIR=/tmp/cargo-targets/<worktree-root-sha256>` for each Cargo
 command, where the hash is computed from the canonical worktree path.
+
+## Git packet framing
+
+`git_wire` provides a bounded, binary-safe pkt-line reader and encoder. It
+preserves flush, delimiter, response-end and empty-data packets as distinct
+values, limits both each packet and the complete exchange, and makes framing
+or I/O errors terminal. Debug output exposes payload lengths only. This is
+framing infrastructure, not an authorized Git gateway: it does not inspect
+compressed pack objects for credential reflection, issue broker capabilities,
+or enable guest Git execution.
+
+The local integration test drives real `git upload-pack --stateless-rpc`,
+round-trips its sideband response through the codec byte-for-byte, reconstructs
+the pack, and has `git index-pack --strict` and `git cat-file` verify the
+original 300,000-byte binary blob. All Git operations occur in disposable
+task-local repositories with isolated configuration and an empty hook path.
+
+The MCP reader now stops at its message-size bound before reading a full line;
+its regression keeps stdin open after an oversized prefix to verify that
+neither newline nor EOF is needed for refusal.

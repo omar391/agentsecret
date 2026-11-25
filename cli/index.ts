@@ -9,8 +9,10 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { homedir } from "node:os";
 import path, { join } from "node:path";
 import { exportJWK } from "jose";
@@ -89,6 +91,11 @@ import {
 } from "./browser/action";
 import { ExecutorStore, macOsExecutorBackend } from "./browser/executor-store";
 import { parseRunArgs, RunSpecError, type RunSpec } from "./run-spec";
+import {
+  createRunBindingTokens,
+  startRunMediator,
+  type RunMediation,
+} from "./run-mediation";
 import {
   managedBrowserReceiptDirectory,
   parseManagedBrowserArgs,
@@ -2887,13 +2894,95 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const receipt = await runGuestCommand(spec, {
-      hostRoot,
-      configDir,
-      signal: operation.signal,
-      stdout: process.stdout,
-      stderr: process.stderr,
-    });
+    let mediation:
+      | {
+          origin: string;
+          bindingFile: string;
+          envFile: string;
+          tokens: { envName: string; alias: string; token: string }[];
+          close(): Promise<void>;
+        }
+      | undefined;
+    if (spec.referenceBindings.length) {
+      const session = await credentials();
+      const tokens = createRunBindingTokens(spec);
+      const mediator = await startRunMediator({
+        session,
+        bindings: tokens,
+        egress: spec.egress,
+        resolveAliasReference: async (alias) => {
+          const found = await mcpToolResult(session, "secrets_find", {
+            secret_alias: alias,
+          });
+          if (
+            found.status !== "available" ||
+            typeof found.reference !== "string"
+          )
+            throw new Error("run_binding_reference_unverified");
+          return found.reference;
+        },
+        signal: operation.signal,
+      });
+      const scratch = join(
+        process.env.AGENTSECRET_MEDIATION_HOME || tmpdir(),
+        "agentsecret-mediation-" + Date.now().toString(36) + "-" + random(8),
+      );
+      mkdirSync(scratch, { recursive: true, mode: 0o700 });
+      const bindingFile = join(scratch, "bindings.json");
+      const envFile = join(scratch, "guest.env");
+      writeFileSync(
+        bindingFile,
+        JSON.stringify(
+          tokens.map((binding) => ({
+            env_name: binding.envName,
+            alias: binding.alias,
+            token: binding.token,
+          })),
+        ) + "\n",
+        { mode: 0o600 },
+      );
+      writeFileSync(
+        envFile,
+        tokens
+          .map((binding) => binding.envName + "=" + binding.token)
+          .join("\n") + "\n",
+        { mode: 0o600 },
+      );
+      chmodSync(envFile, 0o600);
+      chmodSync(bindingFile, 0o600);
+      mediation = {
+        origin: mediator.origin,
+        bindingFile,
+        envFile,
+        tokens,
+        close: async () => {
+          await mediator.close();
+          rmSync(scratch, { recursive: true, force: true });
+        },
+      };
+    }
+    let receipt;
+    try {
+      receipt = await runGuestCommand(spec, {
+        hostRoot,
+        configDir,
+        signal: operation.signal,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        ...(mediation
+          ? {
+              mediation: {
+                origin: mediation.origin,
+                bindingFile: mediation.bindingFile,
+                envFile: mediation.envFile,
+                tokens: mediation.tokens,
+              },
+            }
+          : {}),
+      });
+    } finally {
+      await mediation?.close();
+    }
     console.log(JSON.stringify(receipt));
     process.exitCode =
       receipt.status === "completed"

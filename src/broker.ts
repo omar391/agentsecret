@@ -11,7 +11,15 @@ import { authority } from "./state/authority-kernel";
 import type { Envelope } from "./vaults/encryption";
 import type { VaultConnection } from "./types";
 import { resolveSecret } from "./vaults/manager";
-import { hash, HttpError, readText, random } from "./security/primitives";
+import {
+  hash,
+  HttpError,
+  readBytes,
+  readText,
+  random,
+} from "./security/primitives";
+import { inspectGitHttpResponse } from "./security/git-http";
+import { Buffer } from "node:buffer";
 import {
   sanitizeResponseHeaders,
   scrubSecretsFromPayload,
@@ -216,7 +224,8 @@ export function normalize(input: unknown): ProxyRequestParams {
     !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(p.secret_alias) ||
     typeof p.url !== "string" ||
     p.url.length > 4096 ||
-    (p.method !== undefined && typeof p.method !== "string")
+    (p.method !== undefined && typeof p.method !== "string") ||
+    (p.response_mode !== undefined && p.response_mode !== "git")
   )
     throw new HttpError(400, "invalid_proxy_request");
   let url: URL;
@@ -280,6 +289,7 @@ export function normalize(input: unknown): ProxyRequestParams {
     method,
     headers: p.headers,
     body: p.body,
+    ...(p.response_mode === "git" ? { response_mode: "git" as const } : {}),
   };
 }
 export async function execute(
@@ -468,6 +478,38 @@ async function executeAuthorized(
   }
   const type = response.headers.get("content-type") || "";
   const mediaType = type.split(";", 1)[0].trim().toLowerCase();
+  if (params.response_mode === "git") {
+    if (
+      response.headers.has("content-encoding") &&
+      !/^identity$/i.test(response.headers.get("content-encoding") || "")
+    ) {
+      await response.body?.cancel();
+      throw new HttpError(502, "unsupported_response_type");
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = await readBytes(response, 512 * 1024);
+      inspectGitHttpResponse(bytes, type, redactionTargets);
+    } catch {
+      throw new HttpError(502, "unsafe_git_response");
+    }
+    const safeHeaders = sanitizeResponseHeaders(
+      response.headers,
+      redactionTargets,
+    );
+    delete safeHeaders.location;
+    delete safeHeaders.refresh;
+    return {
+      status: response.status,
+      headers: safeHeaders,
+      data: {
+        encoding: "base64",
+        contentType: mediaType,
+        body: Buffer.from(bytes).toString("base64"),
+      },
+      redactionsCount: 0,
+    };
+  }
   const charsetFields = type
     .split(";")
     .slice(1)

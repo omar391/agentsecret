@@ -149,6 +149,77 @@ fn valid_input() -> Vec<u8> {
 }
 
 #[test]
+fn gateway_refuses_symlinked_and_oversized_capability_files() {
+    use std::os::unix::fs::symlink;
+    let path = write_capability_file("synthetic-sensitive-capability", 0o600);
+    let link = path.with_extension("symlink");
+    symlink(&path, &link).expect("create synthetic symlink");
+    let linked = spawn_gateway("http://127.0.0.1:9", &link, &valid_input());
+    assert!(!linked.status.success());
+    assert!(linked.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&linked.stderr).trim(),
+        "capability_file_invalid"
+    );
+    std::fs::remove_file(&link).expect("remove symlink");
+    std::fs::write(&path, vec![b'x'; 513]).expect("write oversized capability fixture");
+    let oversized = spawn_gateway("http://127.0.0.1:9", &path, &valid_input());
+    assert!(!oversized.status.success());
+    assert!(oversized.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&oversized.stderr).trim(),
+        "capability_file_invalid"
+    );
+    std::fs::remove_file(path).expect("remove fixture");
+}
+
+#[test]
+fn gateway_refuses_a_capability_fifo_without_blocking_for_a_writer() {
+    use std::time::{Duration, Instant};
+    let path = write_capability_file("unused", 0o600);
+    std::fs::remove_file(&path).expect("replace fixture");
+    assert!(
+        Command::new("mkfifo")
+            .args(["-m", "600"])
+            .arg(&path)
+            .status()
+            .expect("create FIFO fixture")
+            .success()
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_agentsecret-supervisor"))
+        .args([
+            "gateway",
+            "--broker-origin",
+            "https://broker.example.invalid",
+            "--capability-file",
+        ])
+        .arg(&path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn FIFO probe");
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while child.try_wait().expect("poll FIFO probe").is_none() {
+        if Instant::now() >= deadline {
+            child.kill().expect("stop blocked probe");
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&path);
+            panic!("capability FIFO read blocked");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().expect("collect FIFO refusal");
+    std::fs::remove_file(path).expect("remove FIFO fixture");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        "capability_file_invalid"
+    );
+}
+
+#[test]
 fn gateway_rejects_unsafe_broker_origin_and_invalid_capability() {
     let output = run_gateway(
         "http://127.0.0.1:9",

@@ -35,8 +35,9 @@ fn run() -> Result<(), &'static str> {
         Some(value) if value == OsStr::new("docker-plan") => run_docker_plan(args),
         Some(value) if value == OsStr::new("gateway") => run_gateway(args),
         Some(value) if value == OsStr::new("mcp") => run_mcp(args),
+        Some(value) if value == OsStr::new("mcp-mediate") => run_mcp_mediate(args),
         _ => Err(
-            "usage: agentsecret-supervisor stage --host-root PATH --destination PATH | docker-plan --host-root PATH --scratch PATH --sandbox-name NAME | gateway --broker-origin URL --capability-file PATH | mcp --self PATH --broker-origin URL --capability-file PATH",
+            "usage: agentsecret-supervisor stage --host-root PATH --destination PATH | docker-plan --host-root PATH --scratch PATH --sandbox-name NAME | gateway --broker-origin URL --capability-file PATH | mcp --self PATH --broker-origin URL --capability-file PATH | mcp-mediate --run-token-file PATH",
         ),
     }
 }
@@ -52,9 +53,10 @@ fn read_gateway_request() -> Result<Vec<u8>, &'static str> {
 
 /// Parse a bounded line-delimited JSON message from a trusted host pipe.
 fn read_json_line(input: &mut impl BufRead) -> Result<Option<serde_json::Value>, &'static str> {
-    let mut line = String::new();
+    let mut line = Vec::with_capacity(4096);
     let bytes = input
-        .read_line(&mut line)
+        .take(64 * 1024 + 1)
+        .read_until(b'\n', &mut line)
         .map_err(|_| "mcp_input_read_failed")?;
     if bytes == 0 {
         return Ok(None);
@@ -62,7 +64,7 @@ fn read_json_line(input: &mut impl BufRead) -> Result<Option<serde_json::Value>,
     if bytes > 64 * 1024 {
         return Err("mcp_input_too_large");
     }
-    serde_json::from_str(&line)
+    serde_json::from_slice(&line)
         .map(Some)
         .map_err(|_| "mcp_invalid_json")
 }
@@ -73,17 +75,39 @@ fn read_json_line(input: &mut impl BufRead) -> Result<Option<serde_json::Value>,
 /// process listings would otherwise persist it. The file must be owned by the
 /// invoking user's trust boundary, so group/other permissions are refused.
 fn read_capability_file(path: &Path) -> Result<String, &'static str> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| "capability_file_unavailable")?;
+    use rustix::fs::{Mode, OFlags, open};
+    // Pin the descriptor before checking metadata. NONBLOCK prevents an
+    // attacker-controlled FIFO from blocking before the regular-file check.
+    let descriptor = open(
+        path,
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|error| {
+        if error == rustix::io::Errno::LOOP {
+            "capability_file_invalid"
+        } else {
+            "capability_file_unavailable"
+        }
+    })?;
+    let file = fs::File::from(descriptor);
+    let metadata = file.metadata().map_err(|_| "capability_file_unavailable")?;
     if !metadata.file_type().is_file() {
         return Err("capability_file_invalid");
     }
-    if metadata.mode() & 0o077 != 0 {
+    if metadata.mode() & 0o077 != 0 || metadata.uid() != rustix::process::geteuid().as_raw() {
         return Err("capability_file_permissions");
     }
     if metadata.len() > MAX_CAPABILITY_FILE_BYTES {
         return Err("capability_file_invalid");
     }
-    let value = fs::read_to_string(path).map_err(|_| "capability_file_unavailable")?;
+    let mut value = String::new();
+    file.take(MAX_CAPABILITY_FILE_BYTES + 1)
+        .read_to_string(&mut value)
+        .map_err(|_| "capability_file_invalid")?;
+    if value.len() > MAX_CAPABILITY_FILE_BYTES as usize {
+        return Err("capability_file_invalid");
+    }
     let value = value.trim_end_matches(['\r', '\n']);
     if value.is_empty() || value.len() > MAX_CAPABILITY_FILE_BYTES as usize {
         return Err("capability_file_invalid");
@@ -213,7 +237,8 @@ fn run_mcp(mut args: impl Iterator<Item = OsString>) -> Result<(), &'static str>
                                 "url": {"type": "string"},
                                 "method": {"type": "string"},
                                 "headers": {"type": "object"},
-                                "body": {"type": "string"}
+                                "body": {"type": "string"},
+                            "response_mode": {"type": "string", "enum": ["git"]},
                             },
                             "required": ["secret_alias", "url", "method"],
                             "additionalProperties": false
@@ -279,6 +304,178 @@ fn run_mcp(mut args: impl Iterator<Item = OsString>) -> Result<(), &'static str>
     Ok(())
 }
 
+fn run_mcp_mediate(mut args: impl Iterator<Item = OsString>) -> Result<(), &'static str> {
+    if args.next().as_deref() != Some(OsStr::new("--run-token-file")) {
+        return Err("invalid_arguments");
+    }
+    let token_file = args.next().map(PathBuf::from).ok_or("invalid_arguments")?;
+    if args.next().is_some() {
+        return Err("invalid_arguments");
+    }
+    let origin =
+        std::env::var("AGENTSECRET_MEDIATOR_ORIGIN").map_err(|_| "mediator_origin_unavailable")?;
+    if !agentsecret_supervisor::is_local_mediator_origin(&origin) {
+        return Err("mediator_origin_unsafe");
+    }
+    let tokens =
+        agentsecret_supervisor::read_binding_file(token_file.to_str().ok_or("invalid_arguments")?)
+            .map_err(|_| "sandbox_binding_file_invalid")?;
+
+    let stdin = io::stdin();
+    let mut input = io::BufReader::new(stdin.lock());
+    let stdout = io::stdout();
+    let mut output = stdout.lock();
+    while let Some(message) = read_json_line(&mut input)? {
+        let id = message.get("id").cloned();
+        let method = message.get("method").and_then(serde_json::Value::as_str);
+        let response = match method {
+            Some("initialize") => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "agentsecret-supervisor", "version": env!("CARGO_PKG_VERSION")}
+                }
+            })),
+            Some("notifications/initialized") | Some("notifications/cancelled") => None,
+            Some("tools/list") => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "tools": [{
+                        "name": "proxy_http_request",
+                        "description": "Perform one policy-authorized HTTPS request through the host mediator.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "secret_alias": {"type": "string"},
+                                "url": {"type": "string"},
+                                "method": {"type": "string"},
+                                "headers": {"type": "object"},
+                                "body": {"type": "string"},
+                            "response_mode": {"type": "string", "enum": ["git"]},
+                            },
+                            "required": ["secret_alias", "url", "method"],
+                            "additionalProperties": false
+                        }
+                    }]
+                }
+            })),
+            Some("tools/call") => {
+                let params = message.get("params");
+                let name = params
+                    .and_then(|value| value.get("name"))
+                    .and_then(serde_json::Value::as_str);
+                if name != Some("proxy_http_request") {
+                    Some(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {"code": -32602, "message": "unknown_tool"}
+                    }))
+                } else {
+                    match mediate_call(
+                        &origin,
+                        &tokens,
+                        params.and_then(|value| value.get("arguments")),
+                    ) {
+                        Ok(receipt) => Some(json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "content": [{"type": "text", "text": receipt}],
+                                "isError": false
+                            }
+                        })),
+                        Err(code) => Some(json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {"code": -32603, "message": code}
+                        })),
+                    }
+                }
+            }
+            Some(_) if id.is_some() => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {"code": -32601, "message": "method_not_found"}
+            })),
+            Some(_) => None,
+            None if id.is_some() => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {"code": -32600, "message": "invalid_request"}
+            })),
+            None => None,
+        };
+        if let Some(response) = response {
+            serde_json::to_writer(&mut output, &response).map_err(|_| "mcp_output_write_failed")?;
+            output
+                .write_all(b"\n")
+                .map_err(|_| "mcp_output_write_failed")?;
+            output.flush().map_err(|_| "mcp_output_write_failed")?;
+        }
+    }
+    Ok(())
+}
+
+fn mediate_call(
+    origin: &str,
+    tokens: &[agentsecret_supervisor::RunBinding],
+    arguments: Option<&serde_json::Value>,
+) -> Result<String, &'static str> {
+    let arguments = arguments.ok_or("gateway_request_invalid")?;
+    let object = arguments.as_object().ok_or("gateway_request_invalid")?;
+    // Refuse invalid or unsafe requests inside the guest-facing adapter. The
+    // host mediator stays the authoritative enforcement point, but the guest
+    // never causes a mediation attempt for a malformed/unsafe request. The MCP
+    // argument names are mapped onto the gateway's closed raw-request shape.
+    let mut raw = serde_json::Map::new();
+    raw.insert(
+        "alias".to_owned(),
+        object
+            .get("secret_alias")
+            .cloned()
+            .ok_or("gateway_request_invalid")?,
+    );
+    for key in ["url", "method", "headers", "body", "response_mode"] {
+        if let Some(value) = object.get(key) {
+            raw.insert(key.to_owned(), value.clone());
+        }
+    }
+    let exact = gateway::parse_guest_request(
+        &serde_json::to_vec(&serde_json::Value::Object(raw))
+            .map_err(|_| "gateway_request_invalid")?,
+    )
+    .map_err(gateway_error_code)?;
+    let alias = exact.secret_alias.clone();
+    let token = tokens
+        .iter()
+        .find(|binding| binding.alias == alias)
+        .ok_or("gateway_request_invalid")?;
+    let request = json!({
+        "run_token": token.token,
+        "request": exact,
+    });
+    let bytes = serde_json::to_vec(&request).map_err(|_| "gateway_request_invalid")?;
+    let mut transport = ProductionTransport::new(std::time::Duration::from_secs(20))?;
+    let response = transport
+        .send(&TransportRequest {
+            url: format!("{origin}/mediate"),
+            method: "POST".to_owned(),
+            headers: vec![("content-type".to_owned(), "application/json".to_owned())],
+            body: bytes,
+        })
+        .map_err(|_| "mediation_unavailable")?;
+    if response.status != 200 {
+        return Err("mediation_unavailable");
+    }
+    let body = String::from_utf8(response.body).map_err(|_| "mediation_invalid_response")?;
+    serde_json::from_str::<serde_json::Value>(&body)
+        .map(|_| body)
+        .map_err(|_| "mediation_invalid_response")
+}
+
 fn invoke_gateway(
     self_path: &Path,
     broker_origin: &str,
@@ -287,7 +484,7 @@ fn invoke_gateway(
 ) -> Result<GatewayReceipt, &'static str> {
     let arguments = arguments.ok_or("gateway_request_invalid")?;
     let object = arguments.as_object().ok_or("gateway_request_invalid")?;
-    if object.len() < 3 || object.len() > 5 {
+    if object.len() < 3 || object.len() > 6 {
         return Err("gateway_request_invalid");
     }
     if !matches!(
@@ -301,7 +498,7 @@ fn invoke_gateway(
     if object.keys().any(|key| {
         !matches!(
             key.as_str(),
-            "secret_alias" | "url" | "method" | "headers" | "body"
+            "secret_alias" | "url" | "method" | "headers" | "body" | "response_mode"
         )
     }) {
         return Err("gateway_request_invalid");
@@ -310,6 +507,9 @@ fn invoke_gateway(
         .get("headers")
         .is_some_and(|value| !value.is_object())
         || object.get("body").is_some_and(|value| !value.is_string())
+        || object
+            .get("response_mode")
+            .is_some_and(|value| value.as_str() != Some("git"))
     {
         return Err("gateway_request_invalid");
     }
@@ -328,7 +528,7 @@ fn invoke_gateway(
             .cloned()
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())),
     );
-    for key in ["url", "method", "body"] {
+    for key in ["url", "method", "body", "response_mode"] {
         if let Some(value) = arguments.get(key) {
             guest_request.insert(key.to_owned(), value.clone());
         }
@@ -502,7 +702,21 @@ fn run_docker_plan(mut args: impl Iterator<Item = OsString>) -> Result<(), &'sta
     let plan = parse_plan(&input)?;
     // Reference bindings have no qualified mediation adapter yet; refuse before
     // staging so no workspace is created for a plan that cannot execute.
-    if !plan.reference_bindings.is_empty() {
+    if let Some(mediation) = &plan.mediation {
+        if plan.reference_bindings.is_empty() {
+            return Err("run_request_invalid");
+        }
+        let binding = agentsecret_supervisor::read_binding_file(&mediation.binding_file)
+            .map_err(|_| "sandbox_binding_file_invalid")?;
+        if !agentsecret_supervisor::binding_map_matches(&plan.reference_bindings, &binding) {
+            return Err("sandbox_binding_file_invalid");
+        }
+        let env = agentsecret_supervisor::read_env_file(&mediation.env_file)
+            .map_err(|_| "sandbox_binding_file_invalid")?;
+        if !agentsecret_supervisor::env_map_matches(&plan.reference_bindings, &env) {
+            return Err("sandbox_binding_file_invalid");
+        }
+    } else if !plan.reference_bindings.is_empty() {
         return Err("sandbox_secret_binding_unsupported");
     }
     let host_root = fs::canonicalize(&host_root).map_err(|_| "run_host_root_invalid")?;
@@ -534,9 +748,16 @@ fn run_docker_plan(mut args: impl Iterator<Item = OsString>) -> Result<(), &'sta
     let staged_root = scratch.join("staged");
 
     let files = stage_declared_files(&plan, &host_root, &staged_root).map_err(staging_code)?;
-    let command_plan =
-        compile_sbx_command_plan(&plan, &sandbox_name, &primary, &guest, &staged_root, &files)
-            .map_err(docker_policy_code)?;
+    let command_plan = compile_sbx_command_plan(
+        &plan,
+        &sandbox_name,
+        &primary,
+        &guest,
+        &staged_root,
+        &files,
+        &supervisor_path()?,
+    )
+    .map_err(docker_policy_code)?;
 
     let result = json!({
         "schema": "agentsecret-supervisor/docker-plan/v1",
@@ -551,6 +772,10 @@ fn run_docker_plan(mut args: impl Iterator<Item = OsString>) -> Result<(), &'sta
         "allow_rules": command_plan.allow_rules,
         "verify_policy": command_plan.verify_policy,
         "execute": command_plan.execute,
+        "mcp_add": command_plan.mcp_add,
+        "mcp_load": command_plan.mcp_load,
+        "mcp_unload": command_plan.mcp_unload,
+        "mcp_remove": command_plan.mcp_remove,
         "remove": command_plan.remove,
         "staged_files": files.iter().map(|file| json!({
             "guest_path": file.guest_path,
@@ -561,6 +786,18 @@ fn run_docker_plan(mut args: impl Iterator<Item = OsString>) -> Result<(), &'sta
     write_result(&result, Some(&scratch))?;
     cleanup.0 = PathBuf::new();
     Ok(())
+}
+
+fn supervisor_path() -> Result<PathBuf, &'static str> {
+    std::env::current_exe()
+        .map_err(|_| "supervisor_path_unavailable")
+        .and_then(|path| {
+            if path.is_file() && path.is_absolute() {
+                Ok(path)
+            } else {
+                Err("supervisor_path_unavailable")
+            }
+        })
 }
 
 fn staging_code(error: StagingError) -> &'static str {

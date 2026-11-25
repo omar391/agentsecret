@@ -1377,13 +1377,27 @@ async function routes(
           op: "vault",
           principal,
         });
-        if (!stored) return json({ configured: false, provider: null });
-        const config = (await decryptConfig(stored, principal.tenant, env)) as {
-          type?: unknown;
-        };
+        if (!stored)
+          return json({ configured: false, provider: null, keyId: null });
+        let config: { type?: unknown };
+        try {
+          config = (await decryptConfig(stored, principal.tenant, env)) as {
+            type?: unknown;
+          };
+        } catch (error) {
+          if (!(error instanceof HttpError) || error.status !== 503)
+            throw error;
+          return json({
+            configured: true,
+            provider: "unknown",
+            keyId: stored.kid,
+            readable: false,
+          });
+        }
         return json({
           configured: true,
           provider: typeof config?.type === "string" ? config.type : "unknown",
+          keyId: stored.kid,
         });
       });
     }
@@ -1411,7 +1425,15 @@ async function routes(
         return json({
           providerCapabilities: listProviderCapabilities(),
           connections: connections.map(
-            ({ id, alias, provider, revision, createdAt, updatedAt }) => ({
+            ({
+              id,
+              alias,
+              provider,
+              revision,
+              createdAt,
+              updatedAt,
+              envelope,
+            }) => ({
               id,
               alias,
               provider,
@@ -1419,6 +1441,7 @@ async function routes(
               revision,
               createdAt,
               updatedAt,
+              keyId: envelope?.kid ?? null,
             }),
           ),
         });
@@ -1478,6 +1501,7 @@ async function routes(
             revision,
             createdAt: connection.createdAt,
             updatedAt: time,
+            keyId: envelope.kid,
           },
         });
       });

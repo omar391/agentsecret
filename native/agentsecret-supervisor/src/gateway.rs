@@ -14,6 +14,10 @@ const MAX_GUEST_REQUEST_BYTES: usize = 4 * 1024;
 const MAX_BROKER_REQUEST_BYTES: usize = 60 * 1024;
 const MAX_BROKER_RESPONSE_BYTES: usize = 512 * 1024;
 const SECRET_BODY_PLACEHOLDER: &str = "{{AGENTSECRET_SECRET}}";
+const GIT_REQUEST_CONTENT_TYPES: &[&str] = &[
+    "application/x-git-upload-pack-request",
+    "application/x-git-receive-pack-request",
+];
 
 /// Closed static failure codes; they never contain request data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -60,6 +64,14 @@ struct RawGuestRequest {
     headers: serde_json::Map<String, serde_json::Value>,
     #[serde(default)]
     body: Option<String>,
+    #[serde(default)]
+    response_mode: Option<ResponseMode>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ResponseMode {
+    Git,
 }
 
 /// A validated, secret-free exact proxy request. `url` and `method` are
@@ -72,6 +84,8 @@ pub struct ExactProxyRequest {
     pub headers: serde_json::Map<String, serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_mode: Option<ResponseMode>,
 }
 
 impl ExactProxyRequest {
@@ -329,6 +343,14 @@ fn validate_guest_request(raw: RawGuestRequest) -> Result<ExactProxyRequest, Gat
             }
         }
         Some(body)
+            if raw.response_mode == Some(ResponseMode::Git)
+                && content_type(&headers)
+                    .is_some_and(|value| GIT_REQUEST_CONTENT_TYPES.contains(&value.as_str()))
+                && is_valid_git_request_body(&body) =>
+        {
+            Some(body)
+        }
+        Some(body)
             if matches!(
                 content_type(&headers).as_deref(),
                 Some("application/json" | "text/plain")
@@ -345,6 +367,7 @@ fn validate_guest_request(raw: RawGuestRequest) -> Result<ExactProxyRequest, Gat
         method: raw.method,
         headers,
         body,
+        response_mode: raw.response_mode,
     };
     request.to_wire_bytes()?;
     Ok(request)
@@ -464,12 +487,36 @@ fn finish_broker_response(response: TransportResponse) -> Result<GatewayReceipt,
     })
 }
 
-/// Always fail closed until an explicitly qualified local companion exists.
+/// Fail closed: there is no qualified direct local-companion resolver.
+///
+/// Cloud-provider authorization and value resolution stay authoritative. A
+/// local-only fallback must go through the broker's exact-request capability
+/// contract; it must never resolve values directly on the host.
 ///
 /// # Errors
-/// Currently every call returns [GatewayError::LocalCompanionUnavailable].
+/// Every call returns [GatewayError::LocalCompanionUnavailable].
 pub fn local_companion_resolve() -> Result<GatewayReceipt, GatewayError> {
     Err(GatewayError::LocalCompanionUnavailable)
+}
+
+/// Mediate a local-companion-backed request through the authorized broker.
+///
+/// Local companion providers keep their values outside the cloud, so the owner
+/// authorizes the same exact request shape, the host obtains a one-use broker
+/// capability, and the broker's existing companion flow resolves and injects
+/// the value while this gateway preserves the exact request bytes and refuses
+/// retries. This reuses the normal capability contract rather than defining a
+/// parallel local ticket format.
+///
+/// # Errors
+/// Returns a static code for malformed input or terminal broker outcomes.
+pub fn local_companion_mediate<T: Transport>(
+    transport: &mut T,
+    config: &GatewayConfig,
+    capability: &str,
+    request: &ExactProxyRequest,
+) -> Result<GatewayReceipt, GatewayError> {
+    redeem(transport, config, capability, request)
 }
 
 /// Read an exact number of bytes from a body, refusing a larger response.
@@ -617,6 +664,16 @@ fn content_type(headers: &serde_json::Map<String, serde_json::Value>) -> Option<
         })
 }
 
+/// Git smart-HTTP request bodies are pkt-line text: printable ASCII plus the
+/// TAB/LF/CR separators the wire format uses between records. Every other
+/// control byte and DEL is refused; binary pack data cannot cross this
+/// contract, which also keeps receive-pack uploads fail-closed.
+fn is_valid_git_request_body(value: &str) -> bool {
+    !value
+        .bytes()
+        .any(|byte| matches!(byte, 0..=0x1f | 0x7f) && !matches!(byte, b'\t' | b'\n' | b'\r'))
+}
+
 fn is_valid_utf8_no_control(value: &str) -> bool {
     std::str::from_utf8(value.as_bytes()).is_ok()
         && !value
@@ -667,6 +724,59 @@ mod tests {
         assert_eq!(request.secret_alias, "GITHUBTOKEN");
         assert_eq!(request.method, "GET");
         assert!(request.body.is_none());
+    }
+
+    #[test]
+    fn git_bodies_allow_pkt_line_separators_but_no_other_controls() {
+        let git = |body: &str| {
+            valid_request(json!({
+                "alias": "GIT_TOKEN",
+                "url": "https://git.example.com/repo.git/git-upload-pack",
+                "method": "POST",
+                "headers": {"content-type": "application/x-git-upload-pack-request"},
+                "body": body,
+                "response_mode": "git"
+            }))
+        };
+        let request =
+            parse_guest_request(&git("0014command=fetch\n0001000cdeepen 1\n0000")).unwrap();
+        assert_eq!(request.response_mode, Some(ResponseMode::Git));
+        for body in [
+            "0014command=fetch\n\u{0}binary",
+            "0014command=fetch\u{7}",
+            "\u{1f}0014command=fetch\n",
+        ] {
+            assert_eq!(
+                parse_guest_request(&git(body)),
+                Err(GatewayError::InvalidRequest),
+                "control byte must be refused: {body:?}"
+            );
+        }
+        // The same body without response_mode=git must not reach the broker.
+        let plain = valid_request(json!({
+            "alias": "GIT_TOKEN",
+            "url": "https://git.example.com/repo.git/git-upload-pack",
+            "method": "POST",
+            "headers": {"content-type": "application/x-git-upload-pack-request"},
+            "body": "0014command=fetch\n0000"
+        }));
+        assert_eq!(
+            parse_guest_request(&plain),
+            Err(GatewayError::InvalidRequest)
+        );
+        // Git mode with a non-git content type stays fail-closed.
+        let wrong_type = valid_request(json!({
+            "alias": "GIT_TOKEN",
+            "url": "https://git.example.com/repo.git/git-upload-pack",
+            "method": "POST",
+            "headers": {"content-type": "application/json"},
+            "body": "0014command=fetch\n0000",
+            "response_mode": "git"
+        }));
+        assert_eq!(
+            parse_guest_request(&wrong_type),
+            Err(GatewayError::InvalidRequest)
+        );
     }
 
     #[test]
@@ -752,11 +862,56 @@ mod tests {
     }
 
     #[test]
-    fn local_companion_is_fail_closed() {
+    fn local_companion_is_fail_closed_until_qualified() {
         assert_eq!(
             local_companion_resolve(),
             Err(GatewayError::LocalCompanionUnavailable)
         );
+    }
+
+    #[test]
+    fn local_companion_mediation_reuses_the_exact_capability_contract_once() {
+        let mut transport = StubTransport::default();
+        let config = GatewayConfig::new_testing("http://127.0.0.1/").unwrap();
+        let request = ExactProxyRequest {
+            secret_alias: "LOCAL_ONLY".to_owned(),
+            url: "https://api.example.com/v1".to_owned(),
+            method: "GET".to_owned(),
+            headers: serde_json::Map::new(),
+            body: None,
+            response_mode: None,
+        };
+        transport.next = Some(Ok(TransportResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: br#"{"status":200,"outcomeStatus":0,"data":{"ok":true}}"#.to_vec(),
+        }));
+        assert_eq!(
+            local_companion_mediate(
+                &mut transport,
+                &config,
+                "aspc1.tenant.abcdefghijklmnopqrstuvwxyz012345",
+                &request,
+            ),
+            Ok(GatewayReceipt {
+                status: 200,
+                outcome: GatewayOutcome::Known,
+                data: Some(json!({"ok": true})),
+            })
+        );
+        assert_eq!(transport.calls.len(), 1);
+
+        transport.next = Some(Err(TransportError::Timeout));
+        assert_eq!(
+            local_companion_mediate(
+                &mut transport,
+                &config,
+                "aspc1.tenant.abcdefghijklmnopqrstuvwxyz012345",
+                &request,
+            ),
+            Err(GatewayError::BrokerOutcomeUnknown)
+        );
+        assert_eq!(transport.calls.len(), 2);
     }
 
     #[test]
@@ -799,6 +954,7 @@ mod tests {
             method: "GET".to_owned(),
             headers: serde_json::Map::new(),
             body: None,
+            response_mode: None,
         };
         transport.next = Some(Ok(TransportResponse {
             status: 200,
