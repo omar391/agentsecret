@@ -95,6 +95,7 @@ import {
   withRegistryDatabase,
   type RegistryDatabase,
 } from "../registry/database";
+import { VERSION } from "../version";
 
 /** The only execution-context capability the core path uses. */
 export interface BackgroundContext {
@@ -923,7 +924,7 @@ async function routes(
   if (path === "/health" || path === "/api/info")
     return json({
       service: "agentsecret",
-      version: "3.0.1",
+      version: VERSION,
       profile: "strict-broker",
       configured: adapters.authority.available(),
       providers: ["bitwarden", "companion"],

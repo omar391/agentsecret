@@ -8,6 +8,7 @@ import {
   AccountBoundProviderCredentials,
   type ProviderCredentialBinding,
 } from "../provider-credentials";
+import { VERSION } from "../../src/version";
 
 export interface OnePasswordClient {
   vaults: {
@@ -192,7 +193,7 @@ export class OnePasswordServiceAccountAdapter {
       const client = await createClient({
         auth,
         integrationName: "AgentSecret",
-        integrationVersion: "3.0.1",
+        integrationVersion: VERSION,
       });
       return client;
     },

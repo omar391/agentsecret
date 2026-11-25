@@ -44,6 +44,7 @@ import {
   COMPANION_ONLY_STORES,
   LOCATOR_UNSUPPORTED_STORES,
 } from "../../protocol/consumer-bindings";
+import { VERSION } from "../version";
 
 const PROVIDER_MODE_BY_CONNECTION_TYPE: Record<
   VaultConfig["type"],
@@ -145,7 +146,7 @@ export async function mcp(
       result = {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "agentsecret", version: "3.0.1" },
+        serverInfo: { name: "agentsecret", version: VERSION },
         instructions:
           "Use aliases for authorized broker operations. Strict mode does not export credentials to local commands.",
       };

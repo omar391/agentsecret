@@ -26,6 +26,7 @@ import {
   random,
 } from "../src/security/primitives";
 import { SECRET_BODY_PLACEHOLDER } from "../src/constants";
+import { VERSION } from "../src/version";
 import {
   normalizeNamedSecretLocatorBinding,
   normalizeNamedSecretLocatorInputBinding,
@@ -1123,7 +1124,7 @@ async function fulfillServiceAccountWrite(
           const client = await createClient({
             auth,
             integrationName: "AgentSecret",
-            integrationVersion: "3.0.1",
+            integrationVersion: VERSION,
           });
           return guardServiceAccountClient(client, authorizeDispatch);
         },

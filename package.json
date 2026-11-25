@@ -1,6 +1,6 @@
 {
   "name": "agentsecret",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Policy-bound secret broker for agents, with DPoP and durable authorization",
   "main": "./dist/cli.mjs",
   "scripts": {
