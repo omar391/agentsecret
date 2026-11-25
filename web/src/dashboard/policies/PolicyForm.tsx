@@ -74,9 +74,12 @@ export function PolicyForm({ c }: { c: AppController }) {
             placeholder="Provider reference"
           />
         </label>
-        <div>
-          <label className="field">Secret Alias (e.g. AWS_DYNAMO)</label>
+        <div className="field">
+          <label className="label" htmlFor="policy-alias">
+            Secret Alias (e.g. AWS_DYNAMO)
+          </label>
           <input
+            id="policy-alias"
             className="input input-mono"
             type="text"
             value={newAlias}
@@ -85,9 +88,12 @@ export function PolicyForm({ c }: { c: AppController }) {
             style={{ width: "100%" }}
           />
         </div>
-        <div>
-          <label className="field">Allowed Domains (comma-separated)</label>
+        <div className="field">
+          <label className="label" htmlFor="policy-domains">
+            Allowed Domains (comma-separated)
+          </label>
           <input
+            id="policy-domains"
             className="input input-mono"
             type="text"
             value={newDomains}
@@ -96,9 +102,12 @@ export function PolicyForm({ c }: { c: AppController }) {
             style={{ width: "100%" }}
           />
         </div>
-        <div>
-          <label className="field">Allowed HTTP Methods</label>
+        <div className="field">
+          <label className="label" htmlFor="policy-methods">
+            Allowed HTTP Methods
+          </label>
           <input
+            id="policy-methods"
             className="input"
             type="text"
             value={newMethods}
@@ -107,9 +116,12 @@ export function PolicyForm({ c }: { c: AppController }) {
             style={{ width: "100%" }}
           />
         </div>
-        <div>
-          <label className="field">Description</label>
+        <div className="field">
+          <label className="label" htmlFor="policy-description">
+            Description
+          </label>
           <input
+            id="policy-description"
             className="input"
             type="text"
             value={newDesc}

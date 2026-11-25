@@ -2,6 +2,13 @@ import { useState } from "react";
 import type { AppController } from "../../app/useAppController";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 
+// Failure messages from the executor/grant handlers say what was not done.
+function feedbackClass(message: string): string {
+  return /\b(not|could not|refused|failed)\b/i.test(message)
+    ? "notice notice-error"
+    : "notice notice-success";
+}
+
 export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
   const {
     browserExecutors,
@@ -61,7 +68,7 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
         </button>
       </form>
       {executorFeedback && (
-        <p className="notice notice-info" role="status">
+        <p className={feedbackClass(executorFeedback)} role="status">
           {executorFeedback}
         </p>
       )}
@@ -186,7 +193,7 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
         </button>
       </form>
       {grantFeedback && (
-        <p className="notice notice-info" role="status">
+        <p className={feedbackClass(grantFeedback)} role="status">
           {grantFeedback}
         </p>
       )}

@@ -11,6 +11,7 @@ export function PolicyList({ c }: { c: AppController }) {
     editingLoginAlias,
     handleUpdateLoginLocator,
     policies,
+    policiesLoaded,
     setEditLoginEnabled,
     setEditLoginFieldPath,
     setEditLoginTitle,
@@ -31,7 +32,13 @@ export function PolicyList({ c }: { c: AppController }) {
         </div>
         <span className="badge">{policies.length} total</span>
       </div>
-      {policies.length === 0 ? (
+      {!policiesLoaded ? (
+        <div className="stack-sm" aria-busy="true">
+          <span className="sr-only">Loading policies…</span>
+          <div className="skeleton" style={{ width: "80%" }} />
+          <div className="skeleton" style={{ width: "60%" }} />
+        </div>
+      ) : policies.length === 0 ? (
         <p className="empty-state">
           <strong>No policies yet.</strong>
           Register an alias above to let an agent reach one approved API.

@@ -7,7 +7,11 @@ export function OverviewTab({ c }: { c: AppController }) {
   const used = user?.quotaUsed ?? 0;
   const limit = user?.quotaLimit || 0;
   const percent = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const loginCommand = "agentsecret login --server " + window.location.origin;
+  // The CLI defaults to the "default" tenant; a customer account must name its own.
+  const loginCommand =
+    "agentsecret login --server " +
+    window.location.origin +
+    (user ? " --tenant " + user.id : "");
   return (
     <>
       <PageHeader

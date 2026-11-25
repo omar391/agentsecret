@@ -1,7 +1,9 @@
+import type { AppController } from "../../app/useAppController";
 import { PageHeader } from "../PageHeader";
 
-export function CompanionTab() {
+export function CompanionTab({ c }: { c: AppController }) {
   const origin = window.location.origin;
+  const tenant = c.user ? ` --tenant ${c.user.id}` : "";
   return (
     <>
       <PageHeader
@@ -11,8 +13,8 @@ export function CompanionTab() {
       <section className="card stack">
         <div className="stack-sm">
           <span className="eyebrow">Interactive or headless login</span>
-          <pre className="code-block">{`agentsecret login --server ${origin} --aliases API_TOKEN
-agentsecret login --server ${origin} --device --aliases API_TOKEN`}</pre>
+          <pre className="code-block">{`agentsecret login --server ${origin}${tenant} --aliases API_TOKEN
+agentsecret login --server ${origin}${tenant} --device --aliases API_TOKEN`}</pre>
         </div>
         <p className="notice">
           No OAuth token simulator or raw credential export is available.

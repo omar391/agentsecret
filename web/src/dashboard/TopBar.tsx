@@ -39,7 +39,7 @@ export function TopBar({ c }: { c: AppController }) {
             title="Monthly allowance — open Overview"
           >
             <Gauge size={14} />
-            {used} / {limit} this month
+            {used.toLocaleString()} / {limit.toLocaleString()} this month
           </button>
         )}
       </div>

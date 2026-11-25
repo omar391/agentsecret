@@ -93,7 +93,7 @@ export default function App() {
               {activeTab === "vaults" && <VaultsTab c={c} />}
               {activeTab === "policies" && <PoliciesTab c={c} />}
               {activeTab === "simulator" && <SimulatorTab c={c} />}
-              {activeTab === "oauth" && <CompanionTab />}
+              {activeTab === "oauth" && <CompanionTab c={c} />}
               {activeTab === "audit" && <AuditTab c={c} />}
               {activeTab === "integrations" && <IntegrationsTab c={c} />}
             </div>

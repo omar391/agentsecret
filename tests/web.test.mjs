@@ -249,6 +249,13 @@ test("legacy and unknown dashboard tabs fall back to Overview with the server al
             : "";
     assert.ok(renderedText(renderer.toJSON()).includes("37 / 250"));
     assert.ok(!text.includes("Billing & Quota"));
+    // The CLI defaults to the "default" tenant, so a customer's command must
+    // name the signed-in account or device approval cannot find the grant.
+    assert.equal(
+      renderer.root.findByProps({ "aria-label": "Companion login command" })
+        .props.value,
+      "agentsecret login --server https://broker.example.test --tenant synthetic-account",
+    );
   };
   await renderForTab("billing");
   await renderForTab("unknown");

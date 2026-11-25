@@ -15,6 +15,9 @@ export function useAppController() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [user, setUser] = useState<UserSession | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  // Empty states wait for the first load after sign-in instead of flashing "none yet".
+  const [policiesLoaded, setPoliciesLoaded] = useState(false);
+  const [vaultConnectionsLoaded, setVaultConnectionsLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   // Onboarding is the customer's own display name; it never asks for an email confirmation.
@@ -441,6 +444,7 @@ export function useAppController() {
         findSelector: p.findSelector,
       })),
     );
+    setPoliciesLoaded(true);
   };
   const refreshVaultConnections = async (signal?: AbortSignal) => {
     const res = await fetch("/api/user/vault-connections", { signal });
@@ -448,6 +452,7 @@ export function useAppController() {
     const data = await res.json();
     if (signal?.aborted) return;
     setVaultConnections(data.connections);
+    setVaultConnectionsLoaded(true);
     setProviderModes(data.providerCapabilities || {});
     setSelectedConnectionId((current: string) =>
       data.connections.some(
@@ -470,6 +475,8 @@ export function useAppController() {
     clearVaultCredentialDraft();
     setPolicies([]);
     setVaultConnections([]);
+    setPoliciesLoaded(false);
+    setVaultConnectionsLoaded(false);
     setProviderModes({});
     setSaveConnectionId("");
     setSaveTitle("");
@@ -1259,6 +1266,8 @@ export function useAppController() {
     user,
     setUser,
     isLoadingUser,
+    policiesLoaded,
+    vaultConnectionsLoaded,
     setIsLoadingUser,
     sidebarOpen,
     setSidebarOpen,

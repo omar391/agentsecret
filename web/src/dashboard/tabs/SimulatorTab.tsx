@@ -123,9 +123,11 @@ export function SimulatorTab({ c }: { c: AppController }) {
                 {simResult.error}
               </p>
             )}
-            <pre className="code-block">
-              {JSON.stringify(simResult.data, null, 2)}
-            </pre>
+            {simResult.data !== undefined && (
+              <pre className="code-block">
+                {JSON.stringify(simResult.data, null, 2)}
+              </pre>
+            )}
           </div>
         )}
       </section>

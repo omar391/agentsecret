@@ -31,6 +31,7 @@ export function VaultsTab({ c }: { c: AppController }) {
     setServiceAccountVaultId,
     setVaultProvider,
     vaultConnections,
+    vaultConnectionsLoaded,
     vaultProvider,
     vaultSaveStatus,
   } = c;
@@ -262,7 +263,13 @@ export function VaultsTab({ c }: { c: AppController }) {
             they were saved against.
           </p>
         </div>
-        {vaultConnections.length === 0 ? (
+        {!vaultConnectionsLoaded ? (
+          <div className="stack-sm" aria-busy="true">
+            <span className="sr-only">Loading vault connections…</span>
+            <div className="skeleton" style={{ width: "70%" }} />
+            <div className="skeleton" style={{ width: "45%" }} />
+          </div>
+        ) : vaultConnections.length === 0 ? (
           <p className="empty-state">
             <strong>No vault connections yet.</strong>
             Add one above to start binding secret aliases.

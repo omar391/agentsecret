@@ -3,7 +3,8 @@ import { Check, Copy } from "lucide-react";
 import { PageHeader } from "../PageHeader";
 
 export function IntegrationsTab({ c }: { c: AppController }) {
-  const { copiedSnippet, copyToClipboard } = c;
+  const { copiedSnippet, copyToClipboard, user } = c;
+  const tenant = user ? ` --tenant ${user.id}` : "";
   const origin = window.location.origin;
   const mcp = JSON.stringify(
     {
@@ -28,7 +29,7 @@ export function IntegrationsTab({ c }: { c: AppController }) {
           <span className="eyebrow">
             1 · Companion login and a test request
           </span>
-          <pre className="code-block">{`agentsecret login --server ${origin} --aliases YOUR_ALIAS
+          <pre className="code-block">{`agentsecret login --server ${origin}${tenant} --aliases YOUR_ALIAS
 agentsecret request --alias YOUR_ALIAS --url https://your-allowed-api.example/path`}</pre>
         </div>
         <div className="stack-sm">
