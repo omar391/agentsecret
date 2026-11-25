@@ -1,149 +1,73 @@
+import { useState } from "react";
 import type { AppController } from "../app/useAppController";
-import { Shield } from "lucide-react";
+import { Menu, Shield, X } from "lucide-react";
+
+const LINKS = [
+  { href: "#how-it-works", label: "How It Works" },
+  { href: "#integrations", label: "Integrations" },
+  { href: "#pricing", label: "Plan" },
+  { href: "#faq", label: "FAQ" },
+];
 
 export function LandingHeader({ c }: { c: AppController }) {
   const { setShowAuthModal, setView, user } = c;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const start = () => (user ? setView("dashboard") : setShowAuthModal(true));
   return (
-    <header
-      style={{
-        borderBottom: "1px solid #eaecf0",
-        background: "rgba(255, 255, 255, 0.95)",
-        backdropFilter: "blur(8px)",
-        position: "sticky",
-        top: 0,
-        zIndex: 40,
-      }}
-    >
+    <header className="site-header">
       <div
-        style={{
-          maxWidth: "1160px",
-          margin: "0 auto",
-          padding: "16px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
+        className="container site-header-inner"
+        style={{ position: "relative" }}
       >
-        {/* Brand Logo */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            cursor: "pointer",
-          }}
+        <button
+          type="button"
+          className="brand"
           onClick={() => setView("landing")}
+          aria-label="AgentSecret home"
         >
-          <div
-            style={{
-              background: "#0f172a",
-              color: "#ffffff",
-              padding: "7px",
-              borderRadius: "7px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Shield size={18} strokeWidth={2.4} />
-          </div>
-          <span
-            style={{
-              fontSize: "16px",
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              color: "#0f172a",
-            }}
-          >
-            AgentSecret
+          <span className="brand-mark">
+            <Shield size={16} strokeWidth={2.4} />
           </span>
-        </div>
+          AgentSecret
+        </button>
 
-        {/* Subdued Funnel Anchor Links */}
-        <nav style={{ display: "flex", alignItems: "center", gap: "28px" }}>
-          <a
-            href="#how-it-works"
-            style={{
-              fontSize: "13px",
-              color: "#64748b",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
-          >
-            How It Works
-          </a>
-          <a
-            href="#how-it-works"
-            style={{
-              fontSize: "13px",
-              color: "#64748b",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
-          >
-            Broker Illustration
-          </a>
-          <a
-            href="#integrations"
-            style={{
-              fontSize: "13px",
-              color: "#64748b",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
-          >
-            Integrations
-          </a>
-          <a
-            href="#pricing"
-            style={{
-              fontSize: "13px",
-              color: "#64748b",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
-          >
-            Pricing
-          </a>
+        <nav
+          id="site-nav"
+          className="site-nav"
+          data-open={menuOpen}
+          aria-label="Primary"
+        >
+          {LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+            >
+              {link.label}
+            </a>
+          ))}
         </nav>
 
-        {/* Primary Conversion Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="site-actions">
           <button
+            type="button"
+            className="btn btn-ghost hide-mobile"
             onClick={() => setShowAuthModal(true)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#0f172a",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-              padding: "6px 12px",
-            }}
           >
             Sign in
           </button>
+          <button type="button" className="btn btn-primary" onClick={start}>
+            {user ? "Open Dashboard" : "Get Started Free"}
+          </button>
           <button
-            onClick={() => {
-              if (user) {
-                setView("dashboard");
-              } else {
-                setShowAuthModal(true);
-              }
-            }}
-            style={{
-              background: "#0f172a",
-              color: "#ffffff",
-              border: "none",
-              padding: "8px 16px",
-              borderRadius: "6px",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-            className="btn-tactile"
+            type="button"
+            className="btn btn-ghost btn-icon menu-toggle"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="site-nav"
+            onClick={() => setMenuOpen(!menuOpen)}
           >
-            Get Started Free
+            {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>

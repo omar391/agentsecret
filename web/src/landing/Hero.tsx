@@ -1,298 +1,88 @@
 import type { AppController } from "../app/useAppController";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, Database, KeyRound, Lock, Route } from "lucide-react";
+
+const FACTS = [
+  {
+    icon: <KeyRound size={18} />,
+    label: "Credential delivery",
+    value: "Brokered",
+    detail:
+      "Agents hold aliases; secret values stay in the broker or a local companion.",
+  },
+  {
+    icon: <Route size={18} />,
+    label: "Request policy",
+    value: "Allowlisted",
+    detail: "Exact HTTPS domain, method and path rules per alias.",
+  },
+  {
+    icon: <Lock size={18} />,
+    label: "Agent credentials",
+    value: "DPoP-bound",
+    detail: "Each agent session is tied to a key it must prove it holds.",
+  },
+  {
+    icon: <Database size={18} />,
+    label: "Vaults",
+    value: "Bring your own",
+    detail:
+      "Bitwarden and 1Password service accounts, plus owner-approved local companions.",
+  },
+];
 
 export function Hero({ c }: { c: AppController }) {
   const { setShowAuthModal, setView, user } = c;
   return (
-    <section
-      style={{
-        maxWidth: "1080px",
-        margin: "0 auto",
-        padding: "80px 24px 60px 24px",
-        textAlign: "center",
-      }}
-    >
-      {/* Status Pill */}
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "8px",
-          background: "#ecfdf5",
-          border: "1px solid #a7f3d0",
-          borderRadius: "20px",
-          padding: "4px 14px",
-          marginBottom: "24px",
-        }}
-      >
-        <div
-          style={{
-            width: "6px",
-            height: "6px",
-            borderRadius: "50%",
-            background: "#059669",
-          }}
-        />
-        <span
-          style={{
-            fontSize: "11px",
-            fontFamily: "monospace",
-            color: "#059669",
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-            fontWeight: 700,
-          }}
-        >
+    <section className="hero">
+      <div className="container hero-inner">
+        <span className="pill">
+          <span className="dot dot-success" />
           Policy-bound secret broker
         </span>
-      </div>
-
-      {/* Magnetic Value Proposition Headline */}
-      <h1
-        style={{
-          fontSize: "54px",
-          fontWeight: 800,
-          letterSpacing: "-0.04em",
-          lineHeight: 1.12,
-          color: "#0f172a",
-          maxWidth: "880px",
-          margin: "0 auto 20px auto",
-        }}
-      >
-        Give agents approved API access through secret aliases.
-      </h1>
-
-      {/* Acute Pain Point Subhead */}
-      <p
-        style={{
-          fontSize: "19px",
-          color: "#475569",
-          lineHeight: 1.6,
-          maxWidth: "740px",
-          margin: "0 auto 36px auto",
-        }}
-      >
-        AgentSecret uses <strong>Bitwarden Secrets Manager</strong>,{" "}
-        <strong>1Password service accounts</strong>, or an owner-bound local
-        password-manager companion. Agents receive scoped results through
-        aliases. The operator, broker, device, companion, and approved upstream
-        remain trust boundaries.
-      </p>
-
-      {/* High-Converting Funnel CTAs */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: "14px",
-          flexWrap: "wrap",
-          marginBottom: "40px",
-        }}
-      >
-        <button
-          onClick={() => {
-            if (user) {
-              setView("dashboard");
-            } else {
-              setShowAuthModal(true);
+        <h1 className="hero-title">
+          Give agents approved API access through secret aliases.
+        </h1>
+        <p className="hero-sub">
+          AgentSecret uses <strong>Bitwarden Secrets Manager</strong>,{" "}
+          <strong>1Password service accounts</strong>, or an owner-bound local
+          password-manager companion. Agents receive scoped results through
+          aliases. The operator, broker, device, companion, and approved
+          upstream remain trust boundaries.
+        </p>
+        <div className="row" style={{ justifyContent: "center" }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-lg"
+            onClick={() =>
+              user ? setView("dashboard") : setShowAuthModal(true)
             }
-          }}
-          style={{
-            background: "#0f172a",
-            color: "#ffffff",
-            border: "none",
-            padding: "14px 28px",
-            borderRadius: "6px",
-            fontSize: "15px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-          className="btn-tactile"
-        >
-          Start Securing Agents Free <ArrowRight size={17} />
-        </button>
-
-        <a
-          href="#how-it-works"
-          style={{
-            background: "#ffffff",
-            color: "#0f172a",
-            border: "1px solid #cbd5e1",
-            padding: "14px 22px",
-            borderRadius: "6px",
-            fontSize: "15px",
-            fontWeight: 600,
-            textDecoration: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-          className="btn-tactile"
-        >
-          <Play size={15} color="#2563eb" /> See Broker Illustration
-        </a>
-      </div>
-
-      <div style={{ fontSize: "12px", color: "#64748b" }}>
-        Self-hosted · Operator-configured monthly allowance
-      </div>
-
-      {/* Architecture Metrics Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-          gap: "14px",
-          marginTop: "54px",
-          textAlign: "left",
-        }}
-      >
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "20px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
           >
-            Credential delivery
-          </div>
-          <div
-            style={{
-              fontSize: "28px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#059669",
-              margin: "4px 0",
-            }}
-          >
-            Brokered
-          </div>
-          <div style={{ fontSize: "11px", color: "#64748b" }}>
-            Isolated V8 edge memory injection
-          </div>
+            Start Securing Agents Free <ArrowRight size={17} />
+          </button>
+          <a href="#how-it-works" className="btn btn-secondary btn-lg">
+            How it works
+          </a>
         </div>
+        <p className="subtle">
+          Self-hosted · Operator-configured monthly allowance
+        </p>
 
         <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "20px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          }}
+          className="grid-4"
+          style={{ width: "100%", marginTop: 24, textAlign: "left" }}
         >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Request execution
-          </div>
-          <div
-            style={{
-              fontSize: "28px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#2563eb",
-              margin: "4px 0",
-            }}
-          >
-            Bounded IO
-          </div>
-          <div style={{ fontSize: "11px", color: "#64748b" }}>
-            Global edge worker distribution
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "20px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Firewall Protection
-          </div>
-          <div
-            style={{
-              fontSize: "28px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#4f46e5",
-              margin: "4px 0",
-            }}
-          >
-            Allowlisted
-          </div>
-          <div style={{ fontSize: "11px", color: "#64748b" }}>
-            HTTPS domain, method, and path policies
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "20px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Database &amp; Vaults
-          </div>
-          <div
-            style={{
-              fontSize: "28px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#0f172a",
-              margin: "4px 0",
-            }}
-          >
-            SQLite DO
-          </div>
-          <div style={{ fontSize: "11px", color: "#64748b" }}>
-            Bitwarden / 1Password service account
-          </div>
+          {FACTS.map((fact) => (
+            <div key={fact.label} className="card card-tight feature-card">
+              <span className="feature-icon">{fact.icon}</span>
+              <div>
+                <div className="eyebrow">{fact.label}</div>
+                <div className="h3" style={{ marginTop: 2 }}>
+                  {fact.value}
+                </div>
+              </div>
+              <p className="subtle">{fact.detail}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

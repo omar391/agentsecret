@@ -1,295 +1,92 @@
 import type { AppController } from "../../app/useAppController";
 import { CheckCircle, Copy, Key } from "lucide-react";
+import { PageHeader } from "../PageHeader";
 
 export function OverviewTab({ c }: { c: AppController }) {
   const { copiedKey, copyToClipboard, policies, user } = c;
+  const used = user?.quotaUsed ?? 0;
+  const limit = user?.quotaLimit || 0;
+  const percent = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const loginCommand = "agentsecret login --server " + window.location.origin;
   return (
     <>
-      {/* Gauge Cards */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
-        }}
-      >
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "18px",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Monthly Quota
-          </div>
-          <div
-            style={{
-              fontSize: "22px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#0f172a",
-              margin: "4px 0",
-            }}
-          >
+      <PageHeader
+        title="Overview"
+        description="Your allowance, policies and how agents reach this broker."
+      />
+      <div className="grid-4">
+        <div className="card card-tight stack-sm">
+          <span className="eyebrow">Monthly Quota</span>
+          <div className="stat-value">
             {user?.quotaUsed?.toLocaleString() ?? "0"} /{" "}
             {user?.quotaLimit?.toLocaleString() ?? "—"}
           </div>
           <div
-            style={{
-              height: "4px",
-              background: "#e2e8f0",
-              borderRadius: "2px",
-              marginTop: "10px",
-              overflow: "hidden",
-            }}
+            className="meter"
+            role="progressbar"
+            aria-label="Monthly allowance used"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
           >
-            <div
-              style={{
-                width: `${Math.round(((user?.quotaUsed ?? 0) / (user?.quotaLimit || 1)) * 100)}%`,
-                height: "100%",
-                background: "#059669",
-              }}
-            />
+            <span style={{ width: percent + "%" }} />
           </div>
         </div>
 
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "18px",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Configured Policies
-          </div>
-          <div
-            style={{
-              fontSize: "22px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#2563eb",
-              margin: "4px 0",
-            }}
-          >
-            {policies.length} Active
-          </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "#059669",
-              marginTop: "6px",
-              fontWeight: 600,
-            }}
-          >
-            Domain and method policies
-          </div>
+        <div className="card card-tight stack-sm">
+          <span className="eyebrow">Configured Policies</span>
+          <div className="stat-value">{policies.length} Active</div>
+          <span className="subtle">Domain and method policies</span>
         </div>
 
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "18px",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Database &amp; Vaults
-          </div>
-          <div
-            style={{
-              fontSize: "22px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#4f46e5",
-              margin: "4px 0",
-            }}
-          >
-            SQLite DO
-          </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "#64748b",
-              marginTop: "6px",
-            }}
-          >
-            Server-side AES-256-GCM envelope
-          </div>
+        <div className="card card-tight stack-sm">
+          <span className="eyebrow">Stored credentials</span>
+          <div className="stat-value">Encrypted</div>
+          <span className="subtle">Server-side AES-256-GCM envelope</span>
         </div>
 
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            padding: "18px",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              fontWeight: 600,
-            }}
-          >
-            Credential handling
-          </div>
-          <div
-            style={{
-              fontSize: "22px",
-              fontWeight: 800,
-              fontFamily: "monospace",
-              color: "#059669",
-              margin: "4px 0",
-            }}
-          >
-            Strict broker
-          </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "#64748b",
-              marginTop: "6px",
-            }}
-          >
-            Volatile isolate RAM injection only
-          </div>
+        <div className="card card-tight stack-sm">
+          <span className="eyebrow">Credential handling</span>
+          <div className="stat-value">Strict broker</div>
+          <span className="subtle">
+            Agents get aliases; values stay in the broker or companion
+          </span>
         </div>
       </div>
 
-      {/* Agent Bearer Key Panel */}
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid #e2e8f0",
-          borderRadius: "8px",
-          padding: "22px",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "6px",
-          }}
-        >
-          <h3
-            style={{
-              fontSize: "14px",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              color: "#0f172a",
-            }}
-          >
-            <Key size={15} color="#059669" /> Companion authentication
-          </h3>
-          <span
-            style={{
-              fontSize: "11px",
-              fontFamily: "monospace",
-              color: "#059669",
-              background: "#ecfdf5",
-              padding: "2px 8px",
-              borderRadius: "4px",
-              fontWeight: 600,
-            }}
-          >
-            DEVICE-BOUND SESSION
-          </span>
+      <section className="card">
+        <div className="card-header">
+          <div>
+            <h2 className="card-title row" style={{ gap: 8 }}>
+              <Key size={16} color="var(--accent)" /> Companion authentication
+            </h2>
+            <p className="card-desc">
+              Authorize the companion with explicit aliases. It stores a DPoP
+              key in the operating-system credential store and signs each broker
+              request.
+            </p>
+          </div>
+          <span className="badge badge-success">Device-bound session</span>
         </div>
-        <p
-          style={{
-            fontSize: "12px",
-            color: "#64748b",
-            marginBottom: "14px",
-            lineHeight: 1.4,
-          }}
-        >
-          Authorize the companion with explicit aliases. It stores a DPoP key in
-          the operating-system credential store and signs each broker request.
-        </p>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div className="row" style={{ flexWrap: "nowrap" }}>
           <input
+            className="input input-mono"
             type="text"
             readOnly
-            value={"agentsecret login --server " + window.location.origin}
-            style={{
-              flex: 1,
-              background: "#f8fafc",
-              border: "1px solid #cbd5e1",
-              color: "#0f172a",
-              padding: "9px 12px",
-              borderRadius: "6px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-            }}
+            aria-label="Companion login command"
+            value={loginCommand}
+            style={{ flex: 1 }}
           />
           <button
-            onClick={() =>
-              copyToClipboard(
-                "agentsecret login --server " + window.location.origin,
-                "apiKey",
-              )
-            }
-            style={{
-              background: copiedKey ? "#059669" : "#0f172a",
-              color: "#ffffff",
-              border: "none",
-              padding: "9px 16px",
-              borderRadius: "6px",
-              fontSize: "12px",
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-            className="btn-tactile"
+            type="button"
+            className={"btn " + (copiedKey ? "btn-accent" : "btn-primary")}
+            onClick={() => copyToClipboard(loginCommand, "apiKey")}
           >
-            {copiedKey ? <CheckCircle size={14} /> : <Copy size={14} />}{" "}
+            {copiedKey ? <CheckCircle size={14} /> : <Copy size={14} />}
             {copiedKey ? "Copied" : "Copy"}
           </button>
         </div>
-      </div>
+      </section>
     </>
   );
 }

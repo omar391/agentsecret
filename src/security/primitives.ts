@@ -262,8 +262,18 @@ export function json(value: unknown, status = 200): Response {
     },
   });
 }
+// Minimal shell for server-rendered pages (/device, OAuth consent, device
+// review). Styles stay inline because these pages' CSP allows no external
+// stylesheet, script, font or image. Visual tokens mirror web/DESIGN.md.
+const PAGE_STYLE = `:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#fafbfc;color:#0f172a;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}main{max-width:640px;margin:0 auto;padding:48px 16px}.panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(15,23,42,.06);padding:28px}.brand{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:20px}.mark{display:inline-flex;width:26px;height:26px;border-radius:7px;background:#0f172a}h1{font-size:22px;letter-spacing:-.015em;line-height:1.25;margin:0 0 12px}p{margin:0 0 12px;color:#475569}ul{margin:16px 0;padding:0;list-style:none;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}li{padding:12px 14px;border-bottom:1px solid #e2e8f0;color:#475569;overflow-wrap:anywhere}li:last-child{border-bottom:0}li strong{color:#0f172a}form{display:flex;flex-direction:column;gap:14px;margin-top:8px}label{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}input:not([type=hidden]){width:100%;min-height:40px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13px}input:focus{outline:none;border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.35)}button,a.button{align-self:flex-start;display:inline-flex;align-items:center;min-height:40px;padding:0 18px;border:0;border-radius:8px;background:#0f172a;color:#fff;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}button:hover,a.button:hover{background:#1e293b}a{color:#0f172a}`;
+function page(body: string): string {
+  if (/^\s*<!doctype/i.test(body)) return body;
+  const heading = /<h1>([\s\S]*?)<\/h1>/.exec(body)?.[1] ?? "AgentSecret";
+  const title = heading.replace(/<[^>]*>/g, "");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · AgentSecret</title><style>${PAGE_STYLE}</style></head><body><main><div class="panel"><div class="brand"><span class="mark" aria-hidden="true"></span>AgentSecret</div>${body}</div></main></body></html>`;
+}
 export function html(value: string): Response {
-  return new Response(value, {
+  return new Response(page(value), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",

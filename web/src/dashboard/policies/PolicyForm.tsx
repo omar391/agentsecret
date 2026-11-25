@@ -36,36 +36,15 @@ export function PolicyForm({ c }: { c: AppController }) {
     vaultConnections,
   } = c;
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: "8px",
-        padding: "22px",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "15px",
-          fontWeight: 800,
-          marginBottom: "12px",
-          color: "#0f172a",
-        }}
-      >
+    <div className="card">
+      <h3 className="h3" style={{ marginBottom: "12px" }}>
         Register New Secret Alias Policy
       </h3>
-      <form
-        onSubmit={handleAddPolicy}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "12px",
-        }}
-      >
-        <label>
+      <form className="grid-2" onSubmit={handleAddPolicy}>
+        <label className="field">
           Vault connection
           <select
+            className="select"
             value={selectedConnectionId}
             onChange={(e) => {
               const connectionId = e.target.value;
@@ -86,131 +65,63 @@ export function PolicyForm({ c }: { c: AppController }) {
             ))}
           </select>
         </label>
-        <label>
+        <label className="field">
           Provider secret reference (Bitwarden UUID or item#/fields/field)
           <input
+            className="input"
             value={newSecretId}
             onChange={(e) => setNewSecretId(e.target.value)}
             placeholder="Provider reference"
           />
         </label>
         <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "11px",
-              color: "#64748b",
-              marginBottom: "4px",
-              fontWeight: 600,
-            }}
-          >
-            Secret Alias (e.g. AWS_DYNAMO)
-          </label>
+          <label className="field">Secret Alias (e.g. AWS_DYNAMO)</label>
           <input
+            className="input input-mono"
             type="text"
             value={newAlias}
             onChange={(e) => setNewAlias(e.target.value)}
             placeholder="MY_SERVICE_KEY"
-            style={{
-              width: "100%",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              color: "#0f172a",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-            }}
+            style={{ width: "100%" }}
           />
         </div>
         <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "11px",
-              color: "#64748b",
-              marginBottom: "4px",
-              fontWeight: 600,
-            }}
-          >
-            Allowed Domains (comma-separated)
-          </label>
+          <label className="field">Allowed Domains (comma-separated)</label>
           <input
+            className="input input-mono"
             type="text"
             value={newDomains}
             onChange={(e) => setNewDomains(e.target.value)}
             placeholder="api.service.com, *.service.com"
-            style={{
-              width: "100%",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              color: "#0f172a",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-            }}
+            style={{ width: "100%" }}
           />
         </div>
         <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "11px",
-              color: "#64748b",
-              marginBottom: "4px",
-              fontWeight: 600,
-            }}
-          >
-            Allowed HTTP Methods
-          </label>
+          <label className="field">Allowed HTTP Methods</label>
           <input
+            className="input"
             type="text"
             value={newMethods}
             onChange={(e) => setNewMethods(e.target.value)}
             placeholder="GET, POST"
-            style={{
-              width: "100%",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              color: "#0f172a",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              fontSize: "12px",
-            }}
+            style={{ width: "100%" }}
           />
         </div>
         <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "11px",
-              color: "#64748b",
-              marginBottom: "4px",
-              fontWeight: 600,
-            }}
-          >
-            Description
-          </label>
+          <label className="field">Description</label>
           <input
+            className="input"
             type="text"
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             placeholder="Brief description for LLM catalog"
-            style={{
-              width: "100%",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              color: "#0f172a",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              fontSize: "12px",
-            }}
+            style={{ width: "100%" }}
           />
         </div>
-        <label style={{ gridColumn: "1 / -1" }}>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
           Credential placement
           <select
+            className="select"
             aria-label="Credential placement"
             value={newInjectionType}
             onChange={(event) =>
@@ -225,7 +136,7 @@ export function PolicyForm({ c }: { c: AppController }) {
             </option>
           </select>
           {newInjectionType === "body_placeholder" && (
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            <p className="muted">
               Put exactly one <code>{"{{AGENTSECRET_SECRET}}"}</code> marker in
               each request body. Use `text/plain`, or put the marker in a JSON
               string value or JSON value slot (never a key or substring). The
@@ -239,18 +150,11 @@ export function PolicyForm({ c }: { c: AppController }) {
               connection.id === selectedConnectionId &&
               connection.provider === "onepassword-connect",
           ) && (
-            <fieldset
-              style={{
-                border: "1px solid #cbd5e1",
-                borderRadius: "6px",
-                padding: "10px 12px",
-                marginBottom: "10px",
-              }}
-            >
+            <fieldset className="fieldset">
               <legend style={{ fontSize: "12px", fontWeight: 700 }}>
                 Owner-pinned Connect login lookup
               </legend>
-              <label>
+              <label className="check">
                 <input
                   type="checkbox"
                   checked={newFindLoginEnabled}
@@ -261,17 +165,11 @@ export function PolicyForm({ c }: { c: AppController }) {
                 Allow lookup by this exact login locator
               </label>
               {newFindLoginEnabled && (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "10px",
-                    marginTop: "10px",
-                  }}
-                >
-                  <label>
+                <div className="grid-2" style={{ marginTop: "10px" }}>
+                  <label className="field">
                     Exact Connect item title
                     <input
+                      className="input"
                       value={newFindLoginTitle}
                       onChange={(event) =>
                         setNewFindLoginTitle(event.target.value)
@@ -280,9 +178,10 @@ export function PolicyForm({ c }: { c: AppController }) {
                       required
                     />
                   </label>
-                  <label>
+                  <label className="field">
                     Exact username
                     <input
+                      className="input"
                       value={newFindLoginUsername}
                       onChange={(event) =>
                         setNewFindLoginUsername(event.target.value)
@@ -291,9 +190,10 @@ export function PolicyForm({ c }: { c: AppController }) {
                       required
                     />
                   </label>
-                  <label style={{ gridColumn: "1 / -1" }}>
+                  <label className="field" style={{ gridColumn: "1 / -1" }}>
                     Exact item URLs (one per line)
                     <textarea
+                      className="textarea"
                       value={newFindLoginUris}
                       onChange={(event) =>
                         setNewFindLoginUris(event.target.value)
@@ -302,9 +202,10 @@ export function PolicyForm({ c }: { c: AppController }) {
                       required
                     />
                   </label>
-                  <label>
+                  <label className="field">
                     Exact password field label (optional)
                     <input
+                      className="input"
                       value={newFindLoginFieldPath}
                       onChange={(event) =>
                         setNewFindLoginFieldPath(event.target.value)
@@ -326,18 +227,11 @@ export function PolicyForm({ c }: { c: AppController }) {
               connection.id === selectedConnectionId &&
               connection.provider === "onepassword-connect",
           ) ? (
-            <fieldset
-              style={{
-                border: "1px solid #cbd5e1",
-                borderRadius: "6px",
-                padding: "10px 12px",
-                marginBottom: "10px",
-              }}
-            >
+            <fieldset className="fieldset">
               <legend style={{ fontSize: "12px", fontWeight: 700 }}>
                 Agent vault write grant
               </legend>
-              <label style={{ marginRight: "18px" }}>
+              <label className="check">
                 <input
                   type="checkbox"
                   checked={newSecretWriteCreate}
@@ -347,7 +241,7 @@ export function PolicyForm({ c }: { c: AppController }) {
                 />{" "}
                 Allow creating a secret in this connection
               </label>
-              <label>
+              <label className="check">
                 <input
                   type="checkbox"
                   checked={newSecretWriteUpdate}
@@ -357,7 +251,7 @@ export function PolicyForm({ c }: { c: AppController }) {
                 />{" "}
                 Allow updating this policy’s exact reference
               </label>
-              <label style={{ display: "block", marginTop: "6px" }}>
+              <label className="check">
                 <input
                   type="checkbox"
                   checked={newSecretWriteDelete}
@@ -367,42 +261,21 @@ export function PolicyForm({ c }: { c: AppController }) {
                 />{" "}
                 Allow deleting this policy’s exact reference
               </label>
-              <p
-                style={{
-                  fontSize: "11px",
-                  color: "#64748b",
-                  margin: "6px 0 0",
-                }}
-              >
+              <p className="subtle">
                 Write access is separately requested at CLI login and bound to
                 this alias. No selection means read-only.
               </p>
             </fieldset>
           ) : (
-            <p
-              style={{
-                fontSize: "11px",
-                color: "#64748b",
-                margin: "0 0 10px",
-              }}
-            >
+            <p className="subtle">
               Agent vault writes are currently supported for 1Password Connect
               connections only.
             </p>
           )}
           <button
             type="submit"
-            style={{
-              background: "#0f172a",
-              color: "#ffffff",
-              border: "none",
-              padding: "8px 16px",
-              borderRadius: "6px",
-              fontSize: "12px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-            className="btn-tactile"
+
+            className="btn btn-primary btn-sm"
           >
             + Register Policy
           </button>

@@ -25,10 +25,11 @@ export function FindSecretForm({ c }: { c: AppController }) {
         borderBottom: "1px solid #e2e8f0",
       }}
     >
-      <h3 style={{ margin: 0, fontSize: "14px" }}>Find by reference</h3>
-      <label>
+      <h2 className="card-title">Find by reference</h2>
+      <label className="field">
         Read connection
         <select
+          className="select"
           aria-label="Find connection"
           required
           value={findConnectionId}
@@ -38,11 +39,7 @@ export function FindSecretForm({ c }: { c: AppController }) {
             setFindStatus("idle");
             setFindResult(null);
           }}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: "6px",
-          }}
+          style={{ width: "100%" }}
         >
           <option value="">Choose a connection</option>
           {vaultConnections.map((connection) => (
@@ -59,9 +56,10 @@ export function FindSecretForm({ c }: { c: AppController }) {
           ))}
         </select>
       </label>
-      <label>
+      <label className="field">
         Secret reference
         <input
+          className="input"
           aria-label="Secret reference"
           value={findReference}
           maxLength={1024}
@@ -82,16 +80,8 @@ export function FindSecretForm({ c }: { c: AppController }) {
           !findConnectionId ||
           !findReference.trim()
         }
-        className="btn-tactile"
-        style={{
-          justifySelf: "start",
-          background: "#ffffff",
-          color: "#0f172a",
-          border: "1px solid #cbd5e1",
-          borderRadius: "6px",
-          padding: "9px 16px",
-          fontWeight: 600,
-        }}
+        className="btn btn-secondary"
+        style={{ justifySelf: "start" }}
       >
         {findStatus === "searching" ? "Checking…" : "Find secret"}
       </button>

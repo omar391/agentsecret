@@ -1097,6 +1097,13 @@ test("policy form clears the locator opt-in when a connection disappears", async
       .find((button) => button.children.includes("Disconnect"))
       .props.onClick();
   });
+  // Disconnecting is destructive, so the dashboard asks for confirmation.
+  await act(async () => {
+    await renderer.root
+      .findAllByType("button")
+      .find((button) => button.children.includes("Disconnect vault"))
+      .props.onClick();
+  });
   await act(async () => {
     navButton("Secret Policies").props.onClick();
   });

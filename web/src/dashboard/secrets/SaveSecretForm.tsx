@@ -39,9 +39,10 @@ export function SaveSecretForm({ c }: { c: AppController }) {
         marginTop: "20px",
       }}
     >
-      <label>
+      <label className="field">
         Operation
         <select
+          className="select"
           aria-label="Secret operation"
           value={saveMode}
           disabled={
@@ -63,20 +64,17 @@ export function SaveSecretForm({ c }: { c: AppController }) {
             if (mode === "delete") setSaveValue("");
             setSaveStatus("idle");
           }}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: "6px",
-          }}
+          style={{ width: "100%" }}
         >
           <option value="create">Create a new secret</option>
           <option value="update">Update an exact field</option>
           <option value="delete">Delete an exact field</option>
         </select>
       </label>
-      <label>
+      <label className="field">
         Destination connection
         <select
+          className="select"
           aria-label="Destination connection"
           required
           value={saveConnectionId}
@@ -97,11 +95,7 @@ export function SaveSecretForm({ c }: { c: AppController }) {
             setSavedReference("");
             setDeleteConfirmed(false);
           }}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: "6px",
-          }}
+          style={{ width: "100%" }}
         >
           <option value="">Choose a connection</option>
           {vaultConnections.map((connection) => {
@@ -129,13 +123,7 @@ export function SaveSecretForm({ c }: { c: AppController }) {
       </label>
 
       {saveConnectionId && (
-        <p
-          style={{
-            margin: 0,
-            color: "#475569",
-            fontSize: "12px",
-          }}
-        >
+        <p className="subtle">
           Destination vault is the vault configured for this connection. Create
           and update write one item/field; delete removes only the exact field
           and preserves its containing item and sibling fields.
@@ -143,11 +131,12 @@ export function SaveSecretForm({ c }: { c: AppController }) {
       )}
 
       {saveMode === "update" || saveMode === "delete" ? (
-        <label>
+        <label className="field">
           {saveMode === "delete"
             ? "Exact field reference to delete"
             : "Exact field reference"}
           <input
+            className="input"
             aria-label={
               saveMode === "delete"
                 ? "Delete secret reference"
@@ -177,9 +166,10 @@ export function SaveSecretForm({ c }: { c: AppController }) {
           />
         </label>
       ) : (
-        <label>
+        <label className="field">
           Item title
           <input
+            className="input"
             aria-label="Secret title"
             value={saveTitle}
             maxLength={128}
@@ -191,9 +181,10 @@ export function SaveSecretForm({ c }: { c: AppController }) {
         </label>
       )}
       {saveMode !== "delete" && (
-        <label>
+        <label className="field">
           Secret value
           <input
+            className="input"
             aria-label="Secret value"
             type="password"
             value={saveValue}
@@ -238,42 +229,30 @@ export function SaveSecretForm({ c }: { c: AppController }) {
               )
             }
             onClick={() => void handleCompareSecret()}
-            className="btn-tactile"
-            style={{
-              justifySelf: "start",
-              background: "#ffffff",
-              color: "#0f172a",
-              border: "1px solid #cbd5e1",
-              borderRadius: "6px",
-              padding: "8px 14px",
-              fontWeight: 600,
-            }}
+            className="btn btn-secondary"
+            style={{ justifySelf: "start" }}
           >
             {compareStatus === "checking" ? "Comparing…" : "Compare privately"}
           </button>
-          <p
-            style={{
-              margin: 0,
-              color: "#64748b",
-              fontSize: "12px",
-            }}
-          >
+          <p className="subtle">
             Owner-only comparison against the exact field. Compare privately
             never writes; Ensure field writes only when values differ, then
             verifies the update. Agents cannot call either operation.
           </p>
           {compareStatus === "match" && (
-            <p role="status">
+            <p className="notice notice-info" role="status">
               The entered value matches the field. No write was made.
             </p>
           )}
           {compareStatus === "different" && (
-            <p role="status">
+            <p className="notice notice-info" role="status">
               The entered value differs from the field. No write was made.
             </p>
           )}
           {compareStatus === "error" && (
-            <p role="alert">The value could not be compared with this field.</p>
+            <p className="notice notice-error" role="alert">
+              The value could not be compared with this field.
+            </p>
           )}
           <button
             type="button"
@@ -293,16 +272,8 @@ export function SaveSecretForm({ c }: { c: AppController }) {
               )
             }
             onClick={() => void handleEnsureSecret()}
-            className="btn-tactile"
-            style={{
-              justifySelf: "start",
-              background: "#ffffff",
-              color: "#0f172a",
-              border: "1px solid #cbd5e1",
-              borderRadius: "6px",
-              padding: "8px 14px",
-              fontWeight: 600,
-            }}
+            className="btn btn-secondary"
+            style={{ justifySelf: "start" }}
           >
             {ensureStatus === "checking"
               ? "Ensuring…"
@@ -311,22 +282,24 @@ export function SaveSecretForm({ c }: { c: AppController }) {
                 : "Ensure field"}
           </button>
           {ensureStatus === "unchanged" && (
-            <p role="status">The field already matches. No write was made.</p>
+            <p className="notice notice-info" role="status">
+              The field already matches. No write was made.
+            </p>
           )}
           {ensureStatus === "updated" && (
-            <p role="status">
+            <p className="notice notice-info" role="status">
               The field differed, so it was updated and verified.
             </p>
           )}
           {ensureStatus === "unknown" && (
-            <p role="alert">
+            <p className="notice notice-error" role="alert">
               The update outcome is unknown. Retry the same ensure operation to
               retrieve its receipt, or inspect the selected vault before
               starting another operation.
             </p>
           )}
           {ensureStatus === "error" && (
-            <p role="alert">
+            <p className="notice notice-error" role="alert">
               The field could not be ensured. Check the selected connection and
               reference, then try again.
             </p>
@@ -335,7 +308,7 @@ export function SaveSecretForm({ c }: { c: AppController }) {
       )}
 
       {saveMode === "delete" && (
-        <label style={{ display: "flex", gap: "8px" }}>
+        <label className="check">
           <input
             aria-label="Confirm exact field deletion"
             type="checkbox"

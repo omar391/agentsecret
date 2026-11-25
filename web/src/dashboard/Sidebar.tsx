@@ -1,5 +1,7 @@
+import { useState, type ReactNode } from "react";
 import type { AppController } from "../app/useAppController";
-import { DashboardTab } from "../app/types";
+import type { DashboardTab } from "../app/types";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   Code2,
   Database,
@@ -10,366 +12,192 @@ import {
   LogOut,
   Play,
   Shield,
+  ShieldOff,
 } from "lucide-react";
 
+export const NAV_GROUPS: {
+  title: string;
+  items: { id: DashboardTab; label: string; icon: ReactNode }[];
+}[] = [
+  {
+    title: "Workspace",
+    items: [
+      { id: "overview", label: "Overview", icon: <Layers size={16} /> },
+      {
+        id: "vaults",
+        label: "Vault Connections",
+        icon: <Database size={16} />,
+      },
+      { id: "secrets", label: "Secrets", icon: <Key size={16} /> },
+      { id: "policies", label: "Secret Policies", icon: <Globe size={16} /> },
+      { id: "simulator", label: "Egress Simulator", icon: <Play size={16} /> },
+    ],
+  },
+  {
+    title: "Security & Agents",
+    items: [
+      {
+        id: "oauth",
+        label: "Companion authorization",
+        icon: <Key size={16} />,
+      },
+      { id: "audit", label: "Audit Trail", icon: <List size={16} /> },
+      { id: "integrations", label: "Agent Setup", icon: <Code2 size={16} /> },
+    ],
+  },
+];
+
+export function tabLabel(tab: DashboardTab): string {
+  for (const group of NAV_GROUPS)
+    for (const item of group.items) if (item.id === tab) return item.label;
+  return tab;
+}
+
+function initials(name: string | undefined, fallback: string): string {
+  const source = (name || fallback || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  const letters =
+    parts.length > 1
+      ? parts[0][0] + parts[parts.length - 1][0]
+      : source.slice(0, 2);
+  return letters.toUpperCase();
+}
+
 export function Sidebar({ c }: { c: AppController }) {
-  const { activeTab, handleLogout, setActiveTab, setView, user } = c;
+  const {
+    activeTab,
+    handleLogout,
+    handleRevokeAllSessions,
+    setActiveTab,
+    setView,
+    sidebarOpen,
+    user,
+  } = c;
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
   return (
-    <aside
-      style={{
-        width: "250px",
-        background: "#ffffff",
-        borderRight: "1px solid #eaecf0",
-        display: "flex",
-        flexDirection: "column",
-        flexShrink: 0,
-        position: "sticky",
-        top: 0,
-        height: "100vh",
-      }}
-    >
-      {/* Sidebar Header & Brand */}
-      <div
-        style={{
-          padding: "18px 20px",
-          borderBottom: "1px solid #f1f5f9",
-        }}
+    <>
+      <aside
+        className="sidebar"
+        data-open={sidebarOpen}
+        aria-label="Dashboard navigation"
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "9px",
-            cursor: "pointer",
-          }}
-          onClick={() => setView("landing")}
-        >
-          <div
-            style={{
-              background: "#0f172a",
-              color: "#ffffff",
-              padding: "6px",
-              borderRadius: "6px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+        <div className="stack-sm">
+          <button
+            type="button"
+            className="brand"
+            onClick={() => setView("landing")}
+            aria-label="AgentSecret public site"
           >
-            <Shield size={16} strokeWidth={2.4} />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 800,
-                letterSpacing: "-0.02em",
-                color: "#0f172a",
-              }}
-            >
-              AgentSecret
-            </div>
-            <div
-              style={{
-                fontSize: "10px",
-                color: "#64748b",
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-                fontFamily: "monospace",
-              }}
-            >
-              {window.location.origin}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          padding: "10px 20px",
-          fontSize: 12,
-        }}
-      >
-        <a href="/source.tar.gz" download>
-          Corresponding Source
-        </a>
-        <a href="/source-revision.json" target="_blank" rel="noreferrer">
-          Source revision
-        </a>
-      </div>
-
-      {/* Workspace Selector Pill */}
-      <div style={{ padding: "12px 16px" }}>
-        <div
-          style={{
-            background: "#f1f5f9",
-            borderRadius: "6px",
-            padding: "8px 12px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div
-              style={{
-                width: "7px",
-                height: "7px",
-                borderRadius: "50%",
-                background: "#059669",
-              }}
-            />
-            <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 700,
-                color: "#0f172a",
-              }}
-            >
-              {user?.id || "Not signed in"}
+            <span className="brand-mark">
+              <Shield size={16} strokeWidth={2.4} />
             </span>
-          </div>
-          <span
-            style={{
-              fontSize: "10px",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              padding: "1px 5px",
-              borderRadius: "3px",
-              fontWeight: 600,
-              color: "#475569",
-            }}
-          >
-            {user?.plan?.toUpperCase() || "UNAUTHENTICATED"}
+            AgentSecret
+          </button>
+          <span className="tiny muted break mono">
+            {window.location.origin}
           </span>
         </div>
-      </div>
 
-      {/* Navigation Menus */}
-      <div
-        style={{
-          padding: "6px 12px",
-          flex: 1,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "3px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "10px",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            padding: "6px 10px",
-          }}
-        >
-          Workspace
-        </div>
-
-        {[
-          {
-            id: "overview",
-            label: "Overview",
-            icon: <Layers size={15} />,
-          },
-          {
-            id: "vaults",
-            label: "Vault Connections",
-            icon: <Database size={15} />,
-          },
-          {
-            id: "secrets",
-            label: "Secrets",
-            icon: <Key size={15} />,
-          },
-          {
-            id: "policies",
-            label: "Secret Policies",
-            icon: <Globe size={15} />,
-          },
-          {
-            id: "simulator",
-            label: "Egress Simulator",
-            icon: <Play size={15} />,
-          },
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id as DashboardTab)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              fontSize: "12.5px",
-              fontWeight: activeTab === item.id ? 700 : 500,
-              color: activeTab === item.id ? "#0f172a" : "#475569",
-              background: activeTab === item.id ? "#f1f5f9" : "transparent",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            className="btn-tactile"
-          >
-            <span
-              style={{
-                color: activeTab === item.id ? "#0f172a" : "#64748b",
-              }}
-            >
-              {item.icon}
+        <div className="card-flat stack-sm" style={{ padding: "10px 12px" }}>
+          <div className="row-between">
+            <span className="row" style={{ gap: 8, minWidth: 0 }}>
+              <span className={"dot " + (user ? "dot-success" : "")} />
+              <span className="small break" style={{ fontWeight: 600 }}>
+                {user?.id || "Not signed in"}
+              </span>
             </span>
-            {item.label}
-          </button>
-        ))}
-
-        <div
-          style={{
-            fontSize: "10px",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            padding: "12px 10px 6px 10px",
-          }}
-        >
-          Security &amp; Agents
-        </div>
-
-        {[
-          {
-            id: "oauth",
-            label: "Companion authorization",
-            icon: <Key size={15} />,
-          },
-          { id: "audit", label: "Audit Trail", icon: <List size={15} /> },
-          {
-            id: "integrations",
-            label: "Agent Setup",
-            icon: <Code2 size={15} />,
-          },
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id as DashboardTab)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              fontSize: "12.5px",
-              fontWeight: activeTab === item.id ? 700 : 500,
-              color: activeTab === item.id ? "#0f172a" : "#475569",
-              background: activeTab === item.id ? "#f1f5f9" : "transparent",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            className="btn-tactile"
-          >
-            <span
-              style={{
-                color: activeTab === item.id ? "#0f172a" : "#64748b",
-              }}
-            >
-              {item.icon}
+            <span className="badge">
+              {user?.plan?.toUpperCase() || "UNAUTHENTICATED"}
             </span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Sidebar Bottom: User Profile & Public Site Link */}
-      <div
-        style={{
-          padding: "14px 16px",
-          borderTop: "1px solid #eaecf0",
-          background: "#fafbfc",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "10px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-            <img
-              src={
-                user?.avatarUrl ||
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-              }
-              alt="User"
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "50%",
-                objectFit: "cover",
-              }}
-            />
-            <div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  lineHeight: 1.2,
-                }}
-              >
-                {user?.name || "Developer"}
-              </div>
-              <div style={{ fontSize: "10px", color: "#64748b" }}>
-                {user?.email || "dev@astronlab.com"}
-              </div>
-            </div>
           </div>
-
-          <button
-            onClick={handleLogout}
-            title="Sign Out"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#94a3b8",
-              cursor: "pointer",
-              padding: "4px",
-            }}
-          >
-            <LogOut size={14} />
-          </button>
         </div>
 
-        <button
-          onClick={() => setView("landing")}
-          style={{
-            width: "100%",
-            background: "#ffffff",
-            border: "1px solid #d1d5db",
-            color: "#475569",
-            padding: "6px 10px",
-            borderRadius: "5px",
-            fontSize: "11px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "6px",
-          }}
-          className="btn-tactile"
-        >
-          ← Back to Public Site
-        </button>
-      </div>
-    </aside>
+        <nav className="stack">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} className="sidebar-section">
+              <span className="eyebrow">{group.title}</span>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="nav-item"
+                  aria-current={activeTab === item.id ? "page" : undefined}
+                  onClick={() => setActiveTab(item.id)}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="row tiny">
+            <a className="link-btn" href="/source.tar.gz" download>
+              Corresponding Source
+            </a>
+            <a
+              className="link-btn"
+              href="/source-revision.json"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Source revision
+            </a>
+          </div>
+          {user && (
+            <div className="user-card">
+              <span className="avatar" aria-hidden="true">
+                {initials(user.name, user.id)}
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="small truncate" style={{ fontWeight: 650 }}>
+                  {user.name || user.id}
+                </div>
+                {user.email && (
+                  <div className="tiny muted truncate">{user.email}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon btn-sm"
+                aria-label="Sign out"
+                title="Sign out"
+                onClick={handleLogout}
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
+          {user && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm btn-block"
+              onClick={() => setConfirmRevoke(true)}
+            >
+              <ShieldOff size={14} />
+              Revoke all sessions
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm btn-block"
+            onClick={() => setView("landing")}
+          >
+            ← Back to Public Site
+          </button>
+        </div>
+      </aside>
+      {confirmRevoke && (
+        <ConfirmDialog
+          title="Revoke all sessions?"
+          body="This signs out every browser and companion session for this account and cancels outstanding grants. You will need to sign in again."
+          confirmLabel="Revoke all sessions"
+          onCancel={() => setConfirmRevoke(false)}
+          onConfirm={handleRevokeAllSessions}
+        />
+      )}
+    </>
   );
 }

@@ -1,86 +1,48 @@
 import type { AppController } from "../app/useAppController";
-import { ChevronRight, Zap } from "lucide-react";
+import { ChevronRight, Gauge, Menu } from "lucide-react";
+import { tabLabel } from "./Sidebar";
 
 export function TopBar({ c }: { c: AppController }) {
-  const { activeTab, setActiveTab, user } = c;
+  const { activeTab, setActiveTab, setSidebarOpen, user } = c;
+  const used = user?.quotaUsed ?? 0;
+  const limit = user?.quotaLimit ?? 0;
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        borderBottom: "1px solid #eaecf0",
-        padding: "14px 28px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          fontSize: "13px",
-        }}
-      >
-        <span style={{ color: "#64748b" }}>Workspace</span>
-        <ChevronRight size={14} color="#94a3b8" />
-        <span
-          style={{
-            fontWeight: 700,
-            color: "#0f172a",
-            textTransform: "capitalize",
-          }}
-        >
-          {activeTab.replace(/([A-Z])/g, " $1")}
-        </span>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "11px",
-            color: "#059669",
-            background: "#ecfdf5",
-            padding: "4px 10px",
-            borderRadius: "4px",
-            border: "1px solid #a7f3d0",
-            fontWeight: 600,
-          }}
-        >
-          <div
-            style={{
-              width: "6px",
-              height: "6px",
-              borderRadius: "50%",
-              background: "#059669",
-            }}
-          />
-          {user ? "Account session" : "Not signed in"}
-        </div>
-
+    <header className="topbar">
+      <div className="row" style={{ gap: 8, minWidth: 0 }}>
         <button
-          onClick={() => setActiveTab("overview")}
-          style={{
-            background: "#0f172a",
-            color: "#ffffff",
-            border: "none",
-            padding: "6px 12px",
-            borderRadius: "6px",
-            fontSize: "12px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-          className="btn-tactile"
+          type="button"
+          className="btn btn-ghost btn-icon sidebar-toggle"
+          aria-label="Open navigation"
+          onClick={() => setSidebarOpen(true)}
         >
-          <Zap size={13} fill="#ffffff" /> Allowance
+          <Menu size={18} />
         </button>
+        <nav aria-label="Breadcrumb" className="row small" style={{ gap: 6 }}>
+          <span className="muted hide-mobile">Workspace</span>
+          <ChevronRight size={14} className="hide-mobile" aria-hidden="true" />
+          <span style={{ fontWeight: 700 }} aria-current="page">
+            {tabLabel(activeTab)}
+          </span>
+        </nav>
       </div>
-    </div>
+
+      <div className="row" style={{ gap: 8 }}>
+        <span className="badge badge-success hide-mobile">
+          <span className="dot dot-success" />
+          {user ? "Account session" : "Not signed in"}
+        </span>
+        {user && limit > 0 && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setActiveTab("overview")}
+            title="Monthly allowance — open Overview"
+          >
+            <Gauge size={14} />
+            {used} / {limit} this month
+          </button>
+        )}
+      </div>
+    </header>
   );
 }

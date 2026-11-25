@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { AppController } from "../../app/useAppController";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 
 export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
   const {
@@ -24,39 +26,23 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
     setGrantOrigin,
     setGrantSelector,
   } = c;
+  const [pendingRevoke, setPendingRevoke] = useState<string | null>(null);
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: "8px",
-        padding: "22px",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "15px",
-          fontWeight: 800,
-          marginBottom: "8px",
-          color: "#0f172a",
-        }}
-      >
+    <div className="card stack">
+      <h3 className="h3" style={{ marginBottom: "8px" }}>
         Protected Local Executors and Grants
       </h3>
-      <p style={{ color: "#64748b", fontSize: "12px" }}>
+      <p className="subtle">
         Run <code>agentsecret browser identity</code> on the trusted Mac, then
         paste its public JSON below. Private keys never leave the dedicated
         Keychain item. Grants are short-lived and single-use. Browser execution
         remains disabled until the managed runtime is qualified.
       </p>
-      <form
-        onSubmit={handleApproveExecutor}
-        style={{ display: "grid", gap: "10px" }}
-      >
-        <label>
+      <form onSubmit={handleApproveExecutor} className="form">
+        <label className="field">
           Public executor identity JSON
           <textarea
+            className="textarea"
             aria-label="Public executor identity JSON"
             rows={5}
             value={executorApproval}
@@ -68,47 +54,66 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
         </label>
         <button
           type="submit"
-          className="btn-tactile"
+          className="btn btn-primary"
           style={{ justifySelf: "start" }}
         >
           Approve public identity
         </button>
       </form>
       {executorFeedback && (
-        <p role="status" style={{ color: "#475569" }}>
+        <p className="notice notice-info" role="status">
           {executorFeedback}
         </p>
       )}
-      {browserExecutors.length > 0 && (
-        <div style={{ margin: "16px 0" }}>
-          <strong>Enrolled executors</strong>
-          <ul>
+      <div className="stack-sm">
+        <span className="label">Enrolled executors</span>
+        {browserExecutors.length === 0 ? (
+          <p className="empty-state">
+            <strong>No enrolled executors.</strong>
+            Approve a public identity above to enrol one.
+          </p>
+        ) : (
+          <ul className="list">
             {browserExecutors.map((executor) => (
-              <li key={executor.executorId}>
-                <code>{executor.executorId}</code> · enrolled{" "}
-                {new Date(executor.enrolledAt * 1000).toLocaleString()}{" "}
+              <li key={executor.executorId} className="list-item">
+                <span className="stack-sm" style={{ gap: 2, minWidth: 0 }}>
+                  <code className="code-inline">{executor.executorId}</code>
+                  <span className="subtle">
+                    enrolled{" "}
+                    {new Date(executor.enrolledAt * 1000).toLocaleString()}
+                  </span>
+                </span>
                 <button
+                  className="btn btn-danger btn-sm"
                   type="button"
-                  onClick={() => void handleRevokeExecutor(executor.executorId)}
+                  onClick={() => setPendingRevoke(executor.executorId)}
                 >
                   Revoke
                 </button>
               </li>
             ))}
           </ul>
-        </div>
+        )}
+      </div>
+      {pendingRevoke && (
+        <ConfirmDialog
+          title="Revoke this executor?"
+          body={
+            <>
+              <code className="code-inline">{pendingRevoke}</code> can no longer
+              redeem grants. Outstanding grants for it are cancelled.
+            </>
+          }
+          confirmLabel="Revoke executor"
+          onCancel={() => setPendingRevoke(null)}
+          onConfirm={() => handleRevokeExecutor(pendingRevoke)}
+        />
       )}
-      <form
-        onSubmit={handleIssueBrowserGrant}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "12px",
-        }}
-      >
-        <label>
+      <form className="grid-2" onSubmit={handleIssueBrowserGrant}>
+        <label className="field">
           Executor
           <select
+            className="select"
             aria-label="Protected action executor"
             value={grantExecutorId}
             onChange={(event) => setGrantExecutorId(event.target.value)}
@@ -122,9 +127,10 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
             ))}
           </select>
         </label>
-        <label>
+        <label className="field">
           Secret alias
           <select
+            className="select"
             aria-label="Protected action alias"
             value={grantAlias}
             onChange={(event) => setGrantAlias(event.target.value)}
@@ -138,9 +144,10 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
             ))}
           </select>
         </label>
-        <label>
+        <label className="field">
           Exact HTTPS origin
           <input
+            className="input"
             aria-label="Protected action origin"
             value={grantOrigin}
             onChange={(event) => setGrantOrigin(event.target.value)}
@@ -148,9 +155,10 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
             required
           />
         </label>
-        <label>
+        <label className="field">
           Actions (comma separated)
           <input
+            className="input"
             aria-label="Protected action kinds"
             value={grantActions}
             onChange={(event) => setGrantActions(event.target.value)}
@@ -158,9 +166,10 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
             required
           />
         </label>
-        <label style={{ gridColumn: "1 / -1" }}>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
           Exact field selector
           <input
+            className="input"
             aria-label="Protected action field selector"
             value={grantSelector}
             onChange={(event) => setGrantSelector(event.target.value)}
@@ -170,62 +179,65 @@ export function ExecutorsGrantsPanel({ c }: { c: AppController }) {
         </label>
         <button
           type="submit"
-          className="btn-tactile"
+          className="btn btn-primary"
           style={{ justifySelf: "start" }}
         >
           Issue 60-second grant
         </button>
       </form>
       {grantFeedback && (
-        <p role="status" style={{ color: "#475569" }}>
+        <p className="notice notice-info" role="status">
           {grantFeedback}
         </p>
       )}
       {browserGrants.length > 0 && (
-        <div style={{ marginTop: "16px", overflowX: "auto" }}>
-          <table style={{ width: "100%" }}>
-            <thead>
-              <tr>
-                <th>Alias</th>
-                <th>Origin</th>
-                <th>Actions</th>
-                <th>Expiry</th>
-                <th>State</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {browserGrants.map((grant) => (
-                <tr key={grant.grantId}>
-                  <td>{grant.alias}</td>
-                  <td>{grant.origin}</td>
-                  <td>{grant.kinds.join(", ")}</td>
-                  <td>
-                    {new Date(grant.expiresAt * 1000).toLocaleTimeString()}
-                  </td>
-                  <td>
-                    {grant.revokedAt
-                      ? "revoked"
-                      : grant.redeemedAt
-                        ? "redeemed"
-                        : "unredeemed"}
-                  </td>
-                  <td>
-                    {!grant.revokedAt && !grant.redeemedAt && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleRevokeBrowserGrant(grant.grantId)
-                        }
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
+        <div>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Alias</th>
+                  <th>Origin</th>
+                  <th>Actions</th>
+                  <th>Expiry</th>
+                  <th>State</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {browserGrants.map((grant) => (
+                  <tr key={grant.grantId}>
+                    <td>{grant.alias}</td>
+                    <td>{grant.origin}</td>
+                    <td>{grant.kinds.join(", ")}</td>
+                    <td>
+                      {new Date(grant.expiresAt * 1000).toLocaleTimeString()}
+                    </td>
+                    <td>
+                      {grant.revokedAt
+                        ? "revoked"
+                        : grant.redeemedAt
+                          ? "redeemed"
+                          : "unredeemed"}
+                    </td>
+                    <td>
+                      {!grant.revokedAt && !grant.redeemedAt && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          type="button"
+                          onClick={() =>
+                            void handleRevokeBrowserGrant(grant.grantId)
+                          }
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

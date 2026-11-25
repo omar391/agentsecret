@@ -15,31 +15,20 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
   } = c;
   return (
     <section
+      className="card-flat"
       aria-labelledby="private-input-requests-heading"
-      style={{
-        maxWidth: "560px",
-        marginTop: "20px",
-        padding: "16px",
-        border: "1px solid #cbd5e1",
-        borderRadius: "8px",
-        background: "#f8fafc",
-      }}
+      style={{ marginTop: "20px" }}
     >
-      <h3
-        id="private-input-requests-heading"
-        style={{ margin: "0 0 8px", fontSize: "14px" }}
-      >
+      <h3 className="h3" id="private-input-requests-heading">
         Agent save requests
       </h3>
-      <p style={{ color: "#64748b", fontSize: "12px" }}>
+      <p className="subtle">
         Enter requested values here in your authenticated dashboard. Values are
         sent directly to the selected connection and are never returned to the
         requesting agent.
       </p>
       {privateInputRequests.length === 0 ? (
-        <p style={{ color: "#64748b", fontSize: "13px" }}>
-          No pending requests.
-        </p>
+        <p className="muted">No pending requests.</p>
       ) : (
         <div style={{ display: "grid", gap: "14px" }}>
           {privateInputRequests.map((request) => {
@@ -57,7 +46,7 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
                   borderTop: "1px solid #e2e8f0",
                 }}
               >
-                <p style={{ margin: "0 0 8px", fontSize: "13px" }}>
+                <p style={{ fontSize: "13px" }}>
                   <strong>{request.intent}</strong> for alias{" "}
                   <strong>{request.alias}</strong> in{" "}
                   {connection?.alias ?? "the selected connection"}
@@ -76,7 +65,7 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
                 {request.status === "pending" &&
                 !requestExpired &&
                 connection?.provider === "onepassword-service-account" ? (
-                  <p style={{ color: "#475569", fontSize: "12px" }}>
+                  <p className="subtle">
                     This vault stays on your device. From the agent session that
                     created the request, complete it in the enrolled companion
                     with{" "}
@@ -94,9 +83,10 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
                     }
                     style={{ display: "grid", gap: "8px" }}
                   >
-                    <label>
+                    <label className="field">
                       Secret value
                       <input
+                        className="input"
                         type="password"
                         autoComplete="new-password"
                         required
@@ -121,16 +111,8 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
                         privateInputSubmitting !== null ||
                         request.expiresAt * 1000 <= Date.now()
                       }
-                      className="btn-tactile"
-                      style={{
-                        justifySelf: "start",
-                        background: "#0f172a",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: "6px",
-                        padding: "8px 14px",
-                        fontWeight: 600,
-                      }}
+                      className="btn btn-primary"
+                      style={{ justifySelf: "start" }}
                     >
                       {privateInputSubmitting === request.requestId
                         ? "Saving…"
@@ -178,7 +160,7 @@ export function PrivateInputRequests({ c }: { c: AppController }) {
           type="button"
           disabled={privateInputLoadingMore}
           onClick={() => void handleLoadMorePrivateInputs()}
-          className="btn-tactile"
+          className="btn btn-ghost"
           style={{ justifySelf: "start" }}
         >
           {privateInputLoadingMore ? "Loading…" : "Show older requests"}

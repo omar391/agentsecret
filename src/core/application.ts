@@ -1021,7 +1021,7 @@ async function routes(
   if (path === "/device" && request.method === "GET") {
     if (url.searchParams.has("code")) return deviceReview(request, env);
     return html(
-      `<h1>Approve a device</h1><p>Sign in to your AgentSecret account first, then open the verification link shown by a device you control.</p><a href="/?view=dashboard">Sign in</a>`,
+      `<h1>Approve a device</h1><p>Sign in to your AgentSecret account first, then open the verification link shown by a device you control.</p><a class="button" href="/?view=dashboard">Sign in</a>`,
     );
   }
   if (path === "/device" && request.method === "POST") {

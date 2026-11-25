@@ -14,7 +14,8 @@ export function useAppController() {
   const [view, setView] = useState<ViewMode>("landing");
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [user, setUser] = useState<UserSession | null>(null);
-  const [, setIsLoadingUser] = useState(true);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   // Onboarding is the customer's own display name; it never asks for an email confirmation.
   const [onboardingName, setOnboardingName] = useState("");
@@ -356,6 +357,29 @@ export function useAppController() {
     checkAuthSession();
   }, []);
 
+  // Keep the view and tab in the URL so refresh and back keep position. The
+  // first run is skipped so the initial URL is read before it is rewritten.
+  const urlSyncReady = useRef(false);
+  useEffect(() => {
+    setSidebarOpen(false);
+    if (!urlSyncReady.current) {
+      urlSyncReady.current = true;
+      return;
+    }
+    const history = window.history;
+    if (!history || typeof history.replaceState !== "function") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", view);
+    if (view === "dashboard") params.set("tab", activeTab);
+    else params.delete("tab");
+    params.delete("auth");
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + "?" + params.toString(),
+    );
+  }, [view, activeTab]);
+
   const checkAuthSession = async () => {
     setIsLoadingUser(true);
     try {
@@ -500,6 +524,27 @@ export function useAppController() {
     setUser(null);
     clearVaultCredentialDraft();
     setView("landing");
+  };
+
+  const handleRevokeAllSessions = async () => {
+    try {
+      const res = await fetch("/api/user/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!res.ok) throw new Error();
+      setUser(null);
+      clearVaultCredentialDraft();
+      setView("landing");
+      setDashboardNotice(
+        "Tenant sessions and outstanding grants revoked. Sign in again.",
+      );
+    } catch {
+      setDashboardNotice(
+        "Revocation failed. Retry from an authenticated customer session.",
+      );
+    }
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -1213,7 +1258,11 @@ export function useAppController() {
     setActiveTab,
     user,
     setUser,
+    isLoadingUser,
     setIsLoadingUser,
+    sidebarOpen,
+    setSidebarOpen,
+    handleRevokeAllSessions,
     showAuthModal,
     setShowAuthModal,
     onboardingName,
