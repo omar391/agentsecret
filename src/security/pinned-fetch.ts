@@ -49,9 +49,84 @@ export async function pinnedFetch(
   const addresses = literal
     ? [literal]
     : await resolvePublicAddresses(url.hostname);
+  if (isWorkersRuntime()) return workersFetch(url, init);
   // Do not retry another address after a request may have reached the origin:
   // a lost or malformed response can follow a committed mutation.
   return requestPinnedAddress(url, init, addresses[0], port);
+}
+
+/** True on the Cloudflare Workers runtime (workerd), false on Node. */
+export function isWorkersRuntime(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    navigator.userAgent === "Cloudflare-Workers"
+  );
+}
+
+/**
+ * Workers transport. workerd's node:tls has no ALPN support and Workers refuse
+ * TLS sockets to a raw IP address, so the pinned socket path cannot run there.
+ * After the same target and public-DNS checks in pinnedFetch, the request goes
+ * through the runtime's fetch with manual redirects, the same request-shape
+ * rules and the same response size limits. The runtime resolves the name
+ * again, so there is no per-connection address pin; Workers have no private
+ * network for a rebinding answer to reach. Exported for tests.
+ */
+export async function workersFetch(
+  url: URL,
+  init: RequestInit,
+  transport: typeof fetch = fetch,
+): Promise<Response> {
+  const { method, headers, body } = checkedRequest(url, init);
+  headers.delete("Host");
+  headers.delete("Connection");
+  headers.delete("Content-Length");
+  const response = await transport(url.toString(), {
+    method,
+    headers,
+    body: method === "GET" || method === "HEAD" ? undefined : body,
+    redirect: "manual",
+    signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  let headerBytes = 0;
+  const responseHeaders = new Headers();
+  for (const [name, value] of response.headers) {
+    headerBytes += name.length + value.length + 4;
+    if (!HOP_BY_HOP_HEADERS.has(name.toLowerCase()))
+      responseHeaders.append(name, value);
+  }
+  if (headerBytes > MAX_RESPONSE_HEADER_BYTES) {
+    await response.body?.cancel();
+    throw new Error("upstream_response_too_large");
+  }
+  const bodyless =
+    method === "HEAD" || [204, 205, 304].includes(response.status);
+  if (bodyless || !response.body) {
+    await response.body?.cancel();
+    return new Response(null, {
+      status: response.status,
+      headers: responseHeaders,
+    });
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_RESPONSE_BODY_BYTES) {
+      await reader.cancel();
+      throw new Error("upstream_response_too_large");
+    }
+    chunks.push(value);
+  }
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("content-encoding");
+  return new Response(new Uint8Array(concatMany(chunks)).buffer, {
+    status: response.status,
+    headers: responseHeaders,
+  });
 }
 
 function normalizeIpLiteral(hostname: string): string | undefined {
@@ -294,7 +369,10 @@ function requestPinnedAddress(
   });
 }
 
-function serializeRequest(url: URL, init: RequestInit): string {
+function checkedRequest(
+  url: URL,
+  init: RequestInit,
+): { method: string; headers: Headers; body: string } {
   const method = init.method || "GET";
   if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(method)) {
     throw new Error("unsupported_request_method");
@@ -322,6 +400,11 @@ function serializeRequest(url: URL, init: RequestInit): string {
     "Content-Length",
     String(new TextEncoder().encode(body).byteLength),
   );
+  return { method, headers, body };
+}
+
+function serializeRequest(url: URL, init: RequestInit): string {
+  const { method, headers, body } = checkedRequest(url, init);
   const startLine = `${method} ${url.pathname}${url.search || ""} HTTP/1.1\r\n`;
   const fields = [...headers.entries()]
     .map(([name, value]) => `${name}: ${value}\r\n`)
