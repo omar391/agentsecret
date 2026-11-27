@@ -84,6 +84,7 @@ import {
   verifyTrustedChromeInstallation,
 } from "./browser/chrome";
 import { BrowserActionReceiptStore } from "./browser/receipt-store";
+import { askYesNo, lastPassProfileHome } from "./confirm";
 import {
   BrowserActionError,
   BrowserActionSetupError,
@@ -1897,9 +1898,6 @@ async function confirmExactSecretDeletion(reference: string): Promise<void> {
     output: process.stderr,
     terminal: true,
   });
-  process.stderr.write(
-    `Delete the exact vault field ${reference}? Type the full reference to confirm: `,
-  );
   try {
     const answer = await new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -1933,9 +1931,12 @@ async function confirmExactSecretDeletion(reference: string): Promise<void> {
       prompt.once("SIGINT", onSigint);
       prompt.once("close", onClose);
       operation.signal.addEventListener("abort", onAbort, { once: true });
-      prompt.question("", (line) => {
-        settle(undefined, line);
-      });
+      prompt.question(
+        `Delete the exact vault field ${reference}? Type the full reference to confirm: `,
+        (line) => {
+          settle(undefined, line);
+        },
+      );
     });
     if (answer !== reference)
       throw new Error(
@@ -2171,19 +2172,19 @@ async function main() {
       output: process.stderr,
       terminal: true,
     });
-    let answer: string;
+    let confirmed: boolean;
     try {
       process.stderr.write(
-        `Fastflow profile identity: ${identity.userEmail} (${identity.userId})\n` +
-          `Bind it to AgentSecret alias ${alias.toUpperCase()}? Confirm only if this is the isolated test account. Type YES: `,
+        `Fastflow profile identity: ${identity.userEmail} (${identity.userId})\n`,
       );
-      answer = await new Promise<string>((resolve) => {
-        profileInput.question("", resolve);
-      });
+      confirmed = await askYesNo(
+        profileInput,
+        `Bind it to AgentSecret alias ${alias.toUpperCase()}? Confirm only if this is the isolated test account.`,
+      );
     } finally {
       profileInput.close();
     }
-    if (answer.trim() !== "YES")
+    if (!confirmed)
       throw new Error("bitwarden_password_manager_profile_binding_cancelled");
 
     await macOsKeychainProviderCredentials().put(
@@ -2303,31 +2304,25 @@ async function main() {
       "agentsecret",
       "lastpass",
     );
-    const profileKey = createHash("sha256")
-      .update(JSON.stringify(binding))
-      .digest("hex");
-    const profileHome = join(profileRoot, profileKey);
+    const profileHome = lastPassProfileHome(profileRoot, binding);
     const prompt = createInterface({
       input: process.stdin,
       output: process.stderr,
     });
     let userEmail: string;
-    let answer: string;
+    let confirmed: boolean;
     try {
       userEmail = await new Promise<string>((resolve) => {
         prompt.question("Isolated LastPass test account email: ", resolve);
       });
-      process.stderr.write(
-        `This binds a dedicated LPASS_HOME to AgentSecret alias ${alias.toUpperCase()}. Confirm only if the account is the isolated test account. Type YES: `,
+      confirmed = await askYesNo(
+        prompt,
+        `This binds a dedicated LPASS_HOME to AgentSecret alias ${alias.toUpperCase()}. Confirm only if the account is the isolated test account.`,
       );
-      answer = await new Promise<string>((resolve) => {
-        prompt.question("", resolve);
-      });
     } finally {
       prompt.close();
     }
-    if (answer.trim() !== "YES")
-      throw new Error("lastpass_profile_binding_cancelled");
+    if (!confirmed) throw new Error("lastpass_profile_binding_cancelled");
     mkdirSync(profileHome, { recursive: true, mode: 0o700 });
     chmodSync(profileHome, 0o700);
     const profileInfo = lstatSync(profileHome);
@@ -2339,8 +2334,19 @@ async function main() {
     )
       throw new Error("lastpass_profile_invalid");
     const credentialStore = macOsKeychainProviderCredentials();
-    if (await credentialStore.get(binding))
-      throw new Error("lastpass_profile_already_configured");
+    const existingProfile = await credentialStore.get(binding);
+    if (existingProfile) {
+      let existingHome: unknown;
+      try {
+        existingHome = (JSON.parse(existingProfile) as { home?: unknown }).home;
+      } catch {
+        existingHome = undefined;
+      }
+      // Same directory: already set up. A different (older, too-long) directory
+      // is replaced by this binding's current directory.
+      if (existingHome === profileHome)
+        throw new Error("lastpass_profile_already_configured");
+    }
     await credentialStore.put(
       binding,
       serializeLastPassProfile(profileHome, userEmail.trim()),
